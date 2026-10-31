@@ -45,6 +45,12 @@ return table.freeze({
 	FollowUpWindow = 0.45,
 	ChainResetTime = 1.2, -- consecutive hits within this keep diminishing hitstun
 
+	-- status effects (Shared/StatusEffects)
+	Status = table.freeze({
+		MinCCDuration = 0.3, -- LoL floor: Tenacity never takes a CC below this (or below its own base, if shorter)
+		DefaultCleanseTags = table.freeze({ Cleansable = true }),
+	}),
+
 	-- hit-claim validation (server)
 	ClaimTimeSlack = 0.35, -- seconds of latency allowed around the active window
 	ClaimRangeSlack = 4, -- studs beyond the hitbox reach

@@ -1,6 +1,7 @@
 --!strict
 -- Client → server traffic: rate-limited intents (token bucket per player) into CombatService,
--- hit claims into HitService.
+-- hit claims into HitService. Attack / Dodge intents a status effect blocks are dropped here (no state
+-- change, no ack); defend intents always pass so a held block resumes after a stun.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,6 +41,12 @@ end
 
 local Actions = CombatEnums.Actions
 
+-- intent id → the StatusController action it needs
+local Gated = {
+	[Actions.Attack] = "Attack",
+	[Actions.Dodge] = "Dodge",
+}
+
 function IntentService.Start(_self : any)
 	Players.PlayerRemoving:Connect(function(Player)
 		Buckets[Player] = nil
@@ -52,6 +59,10 @@ function IntentService.Start(_self : any)
 		local Character = Player.Character
 		local C = Character and CombatService.Combatants[Character]
 		if not C then
+			return
+		end
+		local Gate = Gated[ActionId]
+		if Gate and not C.Status:Can(Gate) then
 			return
 		end
 		local Direction = CombatEnums.DirectionName(DirectionId) -- 0 / unknown → nil

@@ -5,11 +5,14 @@
 --
 --   local C = Combatant.new({ Model, Root, Humanoid, Player?, Definition })
 --   C:Snapshot(Now) -> Resolver.Defender     C:TakePosture(Amount, Now) -> broke?
---   C:Regen(Now, Dt)                          C:RefreshExhausted(Config) -> intensity
+--   C:Regen(Now, Dt)                          C:RefreshExhausted(Config, Now?) -> intensity
+-- C.Status (Shared/StatusEffects/StatusController) owns stuns, i-frames, the follow-up window and the
+-- Exhausted debuff; EffectService gives it its change handler and steps it on server time.
 
 local Stats = require(script.Parent.Stats)
 local Exhaustion = require(script.Parent.Exhaustion)
 local Limbs = require(script.Parent.Limbs)
+local StatusController = require(script.Parent.Parent.StatusEffects.StatusController)
 
 local Combatant = {}
 Combatant.__index = Combatant
@@ -37,6 +40,17 @@ export type Args = {
 function Combatant.new(Args : Args)
 	local Schema = Args.Definition.Schema
 	local S = Schema.Stats
+	local Block = Stats.NewBlock({
+		AttackSpeed = S.AttackSpeed or 1,
+		WalkSpeed = Args.BaseWalkSpeed or 16,
+		Armor = S.Armor or 0,
+		MagicResist = S.MagicResist or 0,
+		Tenacity = S.Tenacity or 0,
+		PostureTaken = 1,
+	}, {
+		AttackSpeed = { Min = 0.25, Max = Stats.AttackSpeedCap },
+		WalkSpeed = { Min = 0 },
+	})
 	local self = setmetatable({
 		Model = Args.Model,
 		Root = Args.Root,
@@ -46,17 +60,8 @@ function Combatant.new(Args : Args)
 		Schema = Schema,
 		Runtime = Args.Definition:Instantiate(Args.Model),
 
-		Stats = Stats.NewBlock({
-			AttackSpeed = S.AttackSpeed or 1,
-			WalkSpeed = Args.BaseWalkSpeed or 16,
-			Armor = S.Armor or 0,
-			MagicResist = S.MagicResist or 0,
-			Tenacity = S.Tenacity or 0,
-			PostureTaken = 1,
-		}, {
-			AttackSpeed = { Min = 0.25, Max = Stats.AttackSpeedCap },
-			WalkSpeed = { Min = 0 },
-		}),
+		Stats = Block,
+		Status = StatusController.new(Block),
 
 		MaxPosture = S.MaxPosture,
 		Posture = S.MaxPosture,
@@ -67,12 +72,10 @@ function Combatant.new(Args : Args)
 
 		Attack = nil :: CurrentAttack?,
 		Holding = false, -- defend key held
-		IFramesUntil = -math.huge,
 		ParryStart = nil :: number?,
 		ParryDirection = nil :: string?,
 		DodgeStart = nil :: number?,
 		DodgeDirection = nil :: string?,
-		FollowUpUntil = -math.huge,
 
 		ChainHits = 0,
 		LastHitTaken = -math.huge,
@@ -101,7 +104,7 @@ function Combatant.Snapshot(self : any, Now : number)
 		Phase = Phase,
 		Posture = self.Posture,
 		PostureDamageTaken = self.Stats:Get("PostureTaken"),
-		IFramesUntil = self.IFramesUntil,
+		IFramesUntil = if self.Status:Has("Invulnerable") then math.huge else nil, -- DodgeIFrames / BreakerIFrames
 		ParryStart = if Rt.Current == "Parrying" then self.ParryStart else nil,
 		ParryDirection = self.ParryDirection,
 		DodgeStart = if Rt.Current == "Dodging" then self.DodgeStart else nil,
@@ -111,9 +114,9 @@ function Combatant.Snapshot(self : any, Now : number)
 	}
 end
 
--- state used for attack matching: "FollowUp" during a perfect-dodge window
-function Combatant.MatchState(self : any, Now : number) : string
-	if Now <= self.FollowUpUntil then
+-- state used for attack matching: "FollowUp" while the FollowUpReady effect (perfect dodge) is active
+function Combatant.MatchState(self : any, _Now : number) : string
+	if self.Status:Get("FollowUpReady") then
 		return "FollowUp"
 	end
 	return self.Runtime.Current
@@ -179,25 +182,22 @@ function Combatant.Regen(self : any, Now : number, Dt : number, Config : any) : 
 	return Changed
 end
 
--- syncs the Exhausted debuff modifiers with the current stack count; returns the intensity
-function Combatant.RefreshExhausted(self : any, Config : any) : number
+-- syncs the Exhausted effect's intensity with the current stack count; returns the intensity
+function Combatant.RefreshExhausted(self : any, Config : any, Now : number?) : number
 	local Level = Exhaustion.Intensity(self.Exhaustion, Config.Exhaustion)
 	if Level == self.ExhaustedLevel then
 		return Level
 	end
 	self.ExhaustedLevel = Level
-	self.Stats:RemoveSource("Exhausted")
-	if Level > 0 then
-		local Per = Config.ExhaustedPerLevel
-		self.Stats:AddModifier("Exhausted.AttackSpeed", { Stat = "AttackSpeed", Kind = "PercentMult", Value = math.max(0.1, 1 - Per.AttackSpeed * Level), Source = "Exhausted" })
-		self.Stats:AddModifier("Exhausted.WalkSpeed", { Stat = "WalkSpeed", Kind = "PercentMult", Value = math.max(0.1, 1 - Per.WalkSpeed * Level), Source = "Exhausted" })
-		self.Stats:AddModifier("Exhausted.PostureTaken", { Stat = "PostureTaken", Kind = "PercentAdd", Value = Per.PostureTaken * Level, Source = "Exhausted" })
-	end
+	self.Status:SetIntensity("Exhausted", Level, Now or 0)
 	return Level
 end
 
 -- walk speed for the current state (server sets Humanoid.WalkSpeed from this)
 function Combatant.WalkSpeed(self : any, Config : any) : number
+	if not self.Status:Can("Move") then
+		return 0
+	end
 	local State = self.Runtime.Current
 	local Mult = Config.StateWalk[State] or 1
 	if State == "Blocking" or State == "Parrying" then
@@ -208,6 +208,7 @@ end
 
 function Combatant.Destroy(self : any)
 	self.Attack = nil
+	self.Status:Destroy()
 	self.Runtime:Destroy()
 end
 

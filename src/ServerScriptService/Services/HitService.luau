@@ -1,6 +1,7 @@
 --!strict
 -- Hits: server hitboxes for NPC attacks, client hit-claim validation, outcome resolution and its
--- effects (damage, posture, limbs, knockback; stuns go through CombatService).
+-- consequences (damage, posture, limbs, knockback). Stuns, Airborne, i-frames and the follow-up window
+-- are status effects applied through EffectService.
 -- V2: a claim is also rejected when the attacker travelled further during the windup than the
 -- LockProfile movement curve allows (anti-slide).
 
@@ -26,9 +27,11 @@ HitService.BreakHandlers = {
 } :: { [string]: (any, any, string) -> () }
 
 local CombatService : any = nil
+local EffectService : any = nil
 
 function HitService.Init(_self : any, Get : (string) -> any)
 	CombatService = Get("CombatService")
+	EffectService = Get("EffectService")
 end
 
 local function Clock() : number
@@ -72,8 +75,9 @@ local function ApplyKnockback(A : any, D : any, Spec : any)
 end
 
 local function Damage(D : any, Amount : number)
-	if Amount > 0 then
+	if Amount > 0 and not D.Status:Has("Invulnerable") then
 		(D.Humanoid :: Humanoid):TakeDamage(Amount)
+		D.Status:OnDamaged(EffectService.Now())
 	end
 end
 
@@ -129,23 +133,22 @@ function HitService.ResolveHit(A : any, D : any, Attack : any)
 		if CombatService.Alive(D) then
 			if Cons.Knockback then
 				ApplyKnockback(A, D, Cons.Knockback)
+				EffectService.Apply(D, "Airborne", A, { Duration = Cons.Knockback.Duration or 0.2 })
 			end
 			if Cons.Hitstun > 0 then
-				CombatService.Stun(D, Cons.Hitstun)
+				EffectService.Apply(D, "Hitstun", A, { Duration = Cons.Hitstun }) -- already diminished per chained hit
 			end
 		end
 	elseif Outcome == "GuardBreak" then
 		D.Posture = 0
 		D.Holding = false
-		CombatService.Stun(D, Config.GuardBrokenStun, "GuardBroken", function()
-			D:RestorePosture()
-		end)
+		EffectService.Apply(D, "GuardBroken", A) -- restores posture when it ends
 	elseif Outcome == "Parried" then
 		D:RestorePosture(Config.ParryPostureRefund)
-		CombatService.Stun(A, Config.ParriedStagger)
+		EffectService.Apply(A, "Stagger", D)
 	elseif Outcome == "PerfectDodge" then
-		D.FollowUpUntil = Now + Config.FollowUpWindow
-		D.IFramesUntil = math.max(D.IFramesUntil, Now + Config.PerfectDodgeIFrames)
+		EffectService.Apply(D, "FollowUpReady", A)
+		EffectService.Apply(D, "DodgeIFrames", A, { Duration = Config.PerfectDodgeIFrames })
 	end
 
 	CombatNet.Result:Fire(A.Model, D.Model, Resolver.OutcomeIds[Outcome], math.clamp(math.floor(Dealt + 0.5), 0, 65535))

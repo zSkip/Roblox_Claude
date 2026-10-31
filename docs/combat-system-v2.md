@@ -75,7 +75,7 @@ Windup     = BaseWindup + (AttackTime × WindupPercent − BaseWindup) × Windup
 - **Studio is pushed from git by hand.** Rojo isn't installed and the place has HTTP requests disabled. Changes were made in Studio through MCP and mirrored into `src/`, and both were checked for byte parity.
 
 ## 3. Next (from the V2 plan)
-1. **StatusEffects system** (EffectService + `Shared/StatusEffects`), designed in `docs/status-effect-system.md`:
+1. **StatusEffects system** (EffectService + `Shared/StatusEffects`), designed in `docs/status-effect-system.md`. **Implemented (2026-10-31)** except new CC sources; see the status note at the top of that doc:
    - CC types: Stun, Root, Slow, Cripple (cuts AS), Disarm, Silence, Airborne/Knockup, Knockback.
    - Tenacity with LoL's 0.3 s minimum.
    - Stunned and GuardBroken migrate onto it, and each effect maps to a lock tier.

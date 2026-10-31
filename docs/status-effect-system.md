@@ -4,6 +4,16 @@ Item 1 of V2's "Next" list (`docs/combat-system-v2.md` §3). It turns stuns, slo
 
 Background reference: `skills/game.status-effects.lol-stats-cc.skill.md` (LoL stats, formulas, CC taxonomy). This doc decides how that model lands in **this** codebase.
 
+> **Status (2026-10-31): steps 1–7 of §12 are implemented** in the AiTest place and in `src/`, with 145 specs passing. Step 8 (new CC sources) is still waiting for something that applies Root / Slow / Cripple / Disarm / Silence. The build differs from the design in these ways:
+> - **Timing:** effects run on server time (`Core/Clock`, `workspace:GetServerTimeNow()`), not `os.clock()`. They replicate as **server-time frames** on interim `S_Effect(Target, NetId, Stacks, StartFrame, EndsFrame)` / `S_EffectEnd` channels. This replaces the §9 shape, and the move to the Replicator later is a transport swap only. Frames travel as `F64`, because absolute server-time frames don't fit `U32`. Late joiners and respawns ask for a snapshot with `C_EffectSync`.
+> - **Tenacity floor:** `MinCCDuration` only limits how far Tenacity can shorten a CC. A CC whose base is already shorter than 0.3 s keeps its base, so chained hitstun (×0.85 per hit) still diminishes as before.
+> - **Hitstun diminish** stays in `Resolver.Consequences`; `HitService` passes the result as `Overrides.Duration` (open question 3: kept as-is).
+> - **Exhausted** now compounds per level (`AttackSpeed ×0.94ⁿ`, `WalkSpeed ×0.96ⁿ`), as in §4. The old linear rule gave `1 − 0.06·n`.
+> - **Airborne knockback** is still applied by `HitService` (physics side effect), alongside the `Airborne` effect that owns the lock. No `OnApply` hook is used.
+> - **Intent gate:** `IntentService` drops Attack / Dodge intents that `Can` rejects. Defend intents always pass, so a held F still blocks once a stun ends.
+> - **Client lock:** `LockProfile.Combine(stateSample, EffectController.LockTier(character))` takes the higher tier and the smaller Move / Turn.
+> - **HUD:** text chips (id, stacks, seconds left) above your posture bar, and an `EffectIcons` billboard over everyone else.
+
 ## 1. Goals
 
 1. **One gate for "can I act?"** Today the answer is spread over runtime states (`Stunned`, `GuardBroken`), `WeaponClass.Allowed` and `LockProfile.States`. After this, a combatant's active effects answer `Can("Attack")`, `Can("Move")` and so on, and the lock tier comes from the strongest effect.

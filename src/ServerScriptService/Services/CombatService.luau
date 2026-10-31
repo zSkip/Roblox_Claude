@@ -1,7 +1,8 @@
 --!strict
 -- Server authority over combat state: owns every Combatant, runs intents through the state machine,
--- applies stuns and walk caps, and ticks posture / exhaustion / limb regen. Hits live in HitService.
--- Players and NPCs go through the same functions.
+-- applies walk caps, and ticks posture / exhaustion / limb regen. Hits live in HitService; stuns,
+-- i-frames and the follow-up window are status effects (EffectService), and an action needs both the
+-- state machine and C.Status:Can(Action). Players and NPCs go through the same functions.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -11,13 +12,14 @@ local Combat = ReplicatedStorage.Shared.Combat
 local WeaponClass = require(Combat.WeaponClass)
 local Combatant = require(Combat.Combatant)
 local Exhaustion = require(Combat.Exhaustion)
-local Stats = require(Combat.Stats)
 local Movement = require(Combat.Movement)
 local WeaponModel = require(Combat.WeaponModel)
 local Timeline = require(Combat.Timeline)
+local LockProfile = require(Combat.LockProfile)
 local CombatEnums = require(Combat.CombatEnums)
 local Config = require(Combat.CombatConfig)
 local CombatNet = require(Combat.CombatNet)
+local ServerClock = require(ReplicatedStorage.Core.Clock)
 
 local CombatService = { Priority = 20 }
 CombatService.Combatants = {} :: { [Model]: any }
@@ -26,9 +28,11 @@ CombatService.StateChanged = Deps.Signal.new() -- (Combatant, NewState, Context)
 CombatService.AttackStarted = Deps.Signal.new() -- (Combatant, Attack, Timeline)
 
 local HitService : any = nil
+local EffectService : any = nil
 
 function CombatService.Init(_self : any, Get : (string) -> any)
 	HitService = Get("HitService")
+	EffectService = Get("EffectService")
 	WeaponClass.LoadAll()
 end
 
@@ -53,7 +57,7 @@ function CombatService.SendMeters(C : any)
 end
 
 -- players get a walk cap their MovementController shapes with the lock curve; NPCs are set directly
-local function ApplyMovement(C : any)
+function CombatService.ApplyMovement(C : any)
 	local Hum = C.Humanoid :: Humanoid
 	if Hum.Health <= 0 then
 		return
@@ -64,12 +68,13 @@ local function ApplyMovement(C : any)
 	else
 		Hum.WalkSpeed = if C.Runtime.Current == "Attacking" then 0 else Cap
 	end
-	Hum.JumpHeight = if C.Runtime.Current == "Idle" then Config.BaseJumpHeight else 0
+	Hum.JumpHeight = if C.Runtime.Current == "Idle" and C.Status:Can("Jump") then Config.BaseJumpHeight else 0
 end
+local ApplyMovement = CombatService.ApplyMovement
 
 local function SyncExhaustion(C : any)
 	local Before = C.ExhaustedLevel
-	C:RefreshExhausted(Config)
+	C:RefreshExhausted(Config, ServerClock.Now())
 	if C.ExhaustedLevel ~= Before then
 		C.Model:SetAttribute("AttackSpeed", C.Stats:Get("AttackSpeed"))
 		C.Model:SetAttribute("Exhausted", C.ExhaustedLevel)
@@ -91,9 +96,15 @@ function CombatService.Alive(C : any) : boolean
 end
 local Alive = CombatService.Alive
 
--- back to Blocking if the defend key is still held, else Idle
+-- the state machine and every active status effect must allow it
+local function CanAct(C : any, Action : string, Now : number) : boolean
+	return Alive(C) and C.Runtime:CanStart(Action, Now) and C.Status:Can(Action)
+end
+
+-- back to Blocking if the defend key is still held, else Idle (EffectService calls this when the last
+-- lock effect ends)
 function CombatService.ToNeutral(C : any)
-	if not Alive(C) then
+	if not Alive(C) or C.Status:LockTier() >= LockProfile.Tiers.Locked then
 		return
 	end
 	C.Attack = nil
@@ -104,30 +115,12 @@ function CombatService.ToNeutral(C : any)
 	end
 end
 
--- runs Fn after Delay only if no other action started in between
+-- runs Fn after Delay only if no other action started in between (actions only; stuns are effects)
 local function After(C : any, Id : number, Delay : number, Fn : () -> ())
 	task.delay(Delay, function()
 		if C.Runtime.ActionId == Id and Alive(C) then
 			Fn()
 		end
-	end)
-end
-
-function CombatService.Stun(C : any, Duration : number, State : string?, OnEnd : (() -> ())?)
-	if not Alive(C) then
-		return
-	end
-	C.Attack = nil
-	local Name = State or "Stunned"
-	if Name == "Stunned" then
-		Duration = Stats.CCDuration(Duration, C.Stats:Get("Tenacity"), "Stun")
-	end
-	local Id = C.Runtime:SetState(Name)
-	After(C, Id, Duration, function()
-		if OnEnd then
-			OnEnd()
-		end
-		CombatService.ToNeutral(C)
 	end)
 end
 
@@ -194,7 +187,7 @@ end
 
 function CombatService.StartAttack(C : any, Direction : string?) : boolean
 	local Now = Clock()
-	if not Alive(C) or not C.Runtime:CanStart("Attack", Now) then
+	if not CanAct(C, "Attack", Now) then
 		return false
 	end
 	local Def = C.Runtime:MatchAttack(Direction, Now, C:MatchState(Now))
@@ -202,7 +195,7 @@ function CombatService.StartAttack(C : any, Direction : string?) : boolean
 		return false
 	end
 	if Def.Kind == "FollowUp" then
-		C.FollowUpUntil = -math.huge
+		C.Status:Remove("FollowUpReady", "Consumed")
 	end
 
 	-- exhaustion first, so this swing already uses the new attack speed
@@ -241,7 +234,7 @@ end
 function CombatService.DefendStart(C : any, Direction : string?)
 	local Now = Clock()
 	C.Holding = true
-	if not Alive(C) or not C.Runtime:CanStart("Defend", Now) then
+	if not CanAct(C, "Defend", Now) then
 		return -- still held: ToNeutral will block once the current action ends
 	end
 	local Defense = C.Schema.Defense
@@ -268,16 +261,16 @@ end
 
 function CombatService.Dodge(C : any, Direction : string?)
 	local Now = Clock()
-	if not Alive(C) or not C.Runtime:CanStart("Dodge", Now) then
+	if not CanAct(C, "Dodge", Now) then
 		return
 	end
 	local Dir = Direction or "Back"
 	local Defense = C.Schema.Defense
 	C.DodgeStart = Now
 	C.DodgeDirection = Dir
-	C.IFramesUntil = math.max(C.IFramesUntil, Now + Defense.DodgeIFrames)
 	C.Runtime:SetCooldown("Dodge", Now + Defense.DodgeCooldown)
 	local Id = C.Runtime:SetState("Dodging", { Direction = Dir })
+	EffectService.Apply(C, "DodgeIFrames", nil, { Duration = Defense.DodgeIFrames })
 	if not C.Player then
 		Movement.Dash(C.Root, Movement.DirectionVector(C.Root, Dir), Defense.DodgeSpeed, Defense.DodgeDuration)
 	end

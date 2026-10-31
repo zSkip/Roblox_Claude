@@ -40,6 +40,29 @@ LockProfile.States = table.freeze({
 	Dead = Fixed(Tiers.Locked, 0, 0, false),
 }) :: { [string]: Sample }
 
+-- what a status effect's lock tier alone allows (Root keeps turning; Locked and Forced stop everything)
+LockProfile.TierSamples = table.freeze({
+	[Tiers.Free] = Fixed(Tiers.Free, 1, 1, true),
+	[Tiers.Steer] = Fixed(Tiers.Steer, 1, 1, false),
+	[Tiers.Rooted] = Fixed(Tiers.Rooted, 0, 1, false),
+	[Tiers.Locked] = Fixed(Tiers.Locked, 0, 0, false),
+	[Tiers.Forced] = Fixed(Tiers.Forced, 0, 0, false),
+}) :: { [number]: Sample }
+
+-- merges a state sample with the strongest effect lock: the higher tier, the smaller Move / Turn
+function LockProfile.Combine(S : Sample, EffectTier : number) : Sample
+	if EffectTier <= Tiers.Free then
+		return S
+	end
+	local E = LockProfile.TierSamples[EffectTier] or LockProfile.TierSamples[Tiers.Locked]
+	return {
+		Tier = math.max(S.Tier, E.Tier),
+		Move = math.min(S.Move, E.Move),
+		Turn = math.min(S.Turn, E.Turn),
+		Jump = S.Jump and E.Jump,
+	}
+end
+
 local function Release(Beta : number, At : number) : number
 	if At >= 1 then
 		return if Beta >= 1 then 1 else 0

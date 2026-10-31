@@ -3,6 +3,8 @@
 --   walk speed = the server's WalkCap attribute × the lock's Move share (eases to 0 over a windup)
 --   outside Free, turning moves from Humanoid.AutoRotate to an AlignOrientation toward the camera's yaw,
 --   capped at Lock.TurnRate × the lock's Turn share; Turn 0 holds the current facing
+-- The state's sample is merged with the strongest lock among your mirrored status effects
+-- (LockProfile.Combine), so a Root or stun locks you on the frame its S_Effect arrives.
 -- The server integrates the same curve to reject claims from characters that slid (HitService).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,6 +17,7 @@ local Config = require(Combat.CombatConfig)
 local MovementController = { Priority = 30 }
 
 local CombatController : any = nil
+local EffectController : any = nil
 
 local State = "Idle"
 local StateStart = 0
@@ -31,6 +34,7 @@ MovementController.Sample = LockProfile.States.Idle
 
 function MovementController.Init(_self : any, Get : (string) -> any)
 	CombatController = Get("CombatController")
+	EffectController = Get("EffectController")
 end
 
 local function OnCharacter(Model : Model)
@@ -72,7 +76,10 @@ local function Step()
 	if not H or not R or not A or not Character or H.Health <= 0 then
 		return
 	end
-	local S = LockProfile.Sample(State, os.clock() - StateStart, CurrentTimeline, Config.Lock)
+	local S = LockProfile.Combine(
+		LockProfile.Sample(State, os.clock() - StateStart, CurrentTimeline, Config.Lock),
+		EffectController.LockTier(Character)
+	)
 	MovementController.Sample = S
 
 	local Cap = Character:GetAttribute("WalkCap") :: number?

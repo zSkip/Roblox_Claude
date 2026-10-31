@@ -4,7 +4,7 @@ Planning docs and reference skills for an OOP, schema-driven, reaction-based com
 It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for networking.
 
 - **V2 (current iteration):** [`docs/combat-system-v2.md`](docs/combat-system-v2.md) covers single-script architecture, animations and frame data, LoL attack speed, the tiered animation lock and what's next.
-- **Status effects (design):** [`docs/status-effect-system.md`](docs/status-effect-system.md) covers effect definitions, StatusController, the starting effect set, how stuns and Exhausted migrate onto it, networking, tests and the rollout order.
+- **Status effects (implemented):** [`docs/status-effect-system.md`](docs/status-effect-system.md) covers effect definitions, StatusController, the starting effect set, how stuns and Exhausted migrate onto it, networking, tests and the rollout order.
 - **State machine refactor (plan):** [`docs/state-machine-refactor.md`](docs/state-machine-refactor.md) moves combat actions, status effects and keybind/input logic onto event-driven statecharts.
 - **Replication & validation (design):** [`docs/replication-and-validation.md`](docs/replication-and-validation.md) covers how effects work today, our own component replication over `Net`, client-initiated frame timelines and multi-client consensus validation.
 - **Plan:** [`docs/combat-system-plan.md`](docs/combat-system-plan.md). It covers the architecture, the review of the current code, the schema, a WeaponClass sketch, combat rules, packets, milestones, open questions and improvement ideas.
@@ -51,11 +51,13 @@ Single-script architecture: `ServerScriptService/Main` and `StarterPlayerScripts
 | `src/ReplicatedStorage/Shared/Combat/WeaponModel.luau` / `Movement.luau` / `Limbs.luau` | Motor6D weapon attach (procedural sword), dash/knockback bursts, limb group registry |
 | `src/ReplicatedStorage/Shared/Combat/CombatConfig.luau` / `CombatEnums.luau` / `CombatNet.luau` | global tuning (animation, attack speed, lock), network ids, combat channels |
 | `src/ReplicatedStorage/Shared/Combat/Directions.luau`, `Exhaustion.luau`, `Resolver.luau`, `Attacks.luau`, `Stats.luau` (+ specs) | direction rules, exhaustion stacks, outcome matrix, AttackDef registry, LoL stat math + StatBlock |
+| `src/ReplicatedStorage/Shared/StatusEffects/` | `Effects` (frozen EffectDef registry), `StatusController` (pure per-combatant apply / stack / expire, `Can`, `LockTier`, strongest slow), `EffectTags` |
+| `src/ReplicatedStorage/Core/Clock.luau` | server-time clock and 60 fps frame numbers shared by both sides |
 | `src/ReplicatedStorage/Assets/Animations/` | the Animation instances (`*.model.json` for Rojo) |
-| `src/ServerScriptService/Main.server.luau` + `Services/` | `CombatService` (combatants, state machine, regen), `HitService` (hitboxes, claims + anti-slide, resolution), `IntentService` (rate-limited intents), `PlayerService`, `AnimationService` (NPC animations), `DummyService` (training NPCs), `TestService` (runs specs in Studio) |
+| `src/ServerScriptService/Main.server.luau` + `Services/` | `CombatService` (combatants, state machine, regen), `HitService` (hitboxes, claims + anti-slide, resolution), `IntentService` (rate-limited intents), `PlayerService`, `EffectService` (steps every StatusController on one Heartbeat, derives Stunned / GuardBroken, replicates effects as frames), `AnimationService` (NPC animations), `DummyService` (training NPCs), `TestService` (runs specs in Studio) |
 | `src/ServerScriptService/Tests/` | `*.spec` unit tests (Loader, Timeline, LockProfile, plus the M1/M2 ones) |
 | `src/ServerScriptService/Tools/AnimationBake.luau` | Studio-only: bakes `Assets/Animations` into `AnimationManifest` |
-| `src/StarterPlayerScripts/Main.client.luau` + `Controllers/` | `CombatController` (own character, intents, local hitbox → claims, broadcasts), `InputController` (direction + input buffer), `AnimationController`, `MovementController` (lock), `FxController`, `HudController` |
+| `src/StarterPlayerScripts/Main.client.luau` + `Controllers/` | `CombatController` (own character, intents, local hitbox → claims, broadcasts), `InputController` (direction + input buffer), `AnimationController`, `MovementController` (lock, merged with effect locks), `EffectController` (effect mirror), `FxController`, `HudController` (meters, effect chips) |
 | `default.project.json` | Rojo mapping (optional, see Playtest) |
 
 Every file follows the `domain.subject.focus.skill.md` naming scheme and stays under 60 KB.
