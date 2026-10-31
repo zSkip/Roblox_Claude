@@ -129,4 +129,4 @@ local Direction = table.freeze({ Neutral = 0, Front = 1, Back = 2, Left = 3, Rig
 local DirectionName = table.freeze({ [0] = "Neutral", "Front", "Back", "Left", "Right" })
 export type Direction = "Neutral" | "Front" | "Back" | "Left" | "Right"
 ```
-Numeric values -> cheap Packet `NumberU8`; names for readability and saving.
+Numeric values -> cheap `U8` network token; names for readability and saving.

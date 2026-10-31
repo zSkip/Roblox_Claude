@@ -7,14 +7,27 @@ It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for 
 
 ## Skills
 
-Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, client-side hit detection with multi-client validation.
+Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, client-side hit detection with multi-client validation, PvP + PvE, built around shift-lock.
+
+**No skill hard-requires a third-party module.** Game and engine skills code against `core.contracts.interfaces`, which ships built-in implementations. The `lib.*` / `project.*` skills document optional adapters (Packet, GoodSignal, ProfileStore, HitboxClass, Indexer).
+
+## Code
+
+| Path | What |
+|---|---|
+| `src/ReplicatedStorage/TestKit.luau` | zero-dependency unit test kit (`Describe` / `It` / `Expect`) |
+| `src/ServerScriptService/Tests/RunTests.server.luau` | runs every `*.spec` module when you press Play in Studio |
+| `src/ReplicatedStorage/Combat/Directions.luau` (+ spec) | direction mirror/opposite, incoming side, configurable parry / counter-dodge matcher |
+| `src/ReplicatedStorage/Combat/Exhaustion.luau` (+ spec) | in-combat exhaustion stacks, scaling debuff intensity, out-of-combat decay |
+| `default.project.json` | Rojo mapping (optional; or recreate the scripts by hand in Studio) |
 
 Every file follows the `domain.subject.focus.skill.md` naming scheme and stays under 60 KB.
 Each file starts with YAML front-matter (`name`, `description`) so an agent can pick the right one.
 
 | Group | File | Covers |
 |---|---|---|
-| **lib** (third-party) | [`lib.packet.networking`](skills/lib.packet.networking.skill.md) | Packet constructor, every data type with byte cost, structs/arrays, Fire/FireClient/Response, batching, rate limits, config modules |
+| **core** (start here) | [`core.contracts.interfaces`](skills/core.contracts.interfaces.skill.md) | dependency-free contracts (Signal, Net channels + requests, Hitbox query, SessionStore, Maid) with complete built-in implementations and adapter notes |
+| **lib** (optional adapters) | [`lib.packet.networking`](skills/lib.packet.networking.skill.md) | Packet constructor, every data type with byte cost, structs/arrays, Fire/FireClient/Response, batching, rate limits, config modules |
 | | [`lib.goodsignal.events`](skills/lib.goodsignal.events.skill.md) | GoodSignal API, full source, LIFO ordering, disconnect semantics, typed wrapper, state signals |
 | | [`lib.hitboxclass.hitbox`](skills/lib.hitboxclass.hitbox.skill.md) | HitboxClass v1.2.0 setup (Alive folder), params, spatial options, methods, signals, UseClient internals and security gaps |
 | | [`lib.profilestore.datastore`](skills/lib.profilestore.datastore.skill.md) | ProfileStore module/store/profile API, exported types, signals, constants, costs, loader template, data rules |
@@ -35,7 +48,7 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 | | [`roblox.datatypes.cframe-vector-math`](skills/roblox.datatypes.cframe-vector-math.skill.md) | Vector3/Vector2/CFrame, other datatypes, Enum API, direction math |
 | | [`roblox.feedback.tween-vfx-sound-camera`](skills/roblox.feedback.tween-vfx-sound-camera.skill.md) | TweenService, Debris, particles/trails/Highlight, Sound, camera shake, combat UI, per-outcome feel |
 | | [`roblox.data.datastore-messaging-memory`](skills/roblox.data.datastore-messaging-memory.skill.md) | DataStoreService, OrderedDataStore, BindToClose, MessagingService, MemoryStoreService |
-| **project** (yours) | [`project.indexer.networking`](skills/project.indexer.networking.skill.md) | your Indexer module: API, types, bugs to fix, running it on Packet |
+| **project** (yours, optional adapter) | [`project.indexer.networking`](skills/project.indexer.networking.skill.md) | your Indexer module: API, types, bugs to fix, running it on Packet |
 | **game** (domain) | [`game.combat.architecture-patterns`](skills/game.combat.architecture-patterns.skill.md) | dual-context modules, schema, state machine, input layer, M1 chain, configurable parry rule, resolution matrix, posture/exhaustion, feints, combo breaker, server/client flow |
 | | [`game.combat.hit-validation-multiclient`](skills/game.combat.hit-validation-multiclient.skill.md) | client hit claims, server hard checks, position/state history rewind, victim corroboration, witness trust score |
 | | [`game.combat.limb-damage-highlight`](skills/game.combat.limb-damage-highlight.skill.md) | R6 direction→limb mapping, limb meters, red highlight → burst, white attack telegraph, Highlight budget |

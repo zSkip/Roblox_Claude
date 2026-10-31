@@ -105,7 +105,7 @@ function StatBlock:Get(stat: string): number
 	return v
 end
 ```
-Fire a `StatChanged(stat, value)` GoodSignal from Add/Remove so WalkSpeed, UI etc. react (reaction-based).
+Fire a `StatChanged(stat, value)` signal (any SignalLike) from Add/Remove so WalkSpeed, UI etc. react (reaction-based).
 
 ## 4. Crowd control taxonomy
 
@@ -143,7 +143,7 @@ export type StackMode =
 
 export type EffectDef = {
 	Id: string,
-	NetId: number,                              -- U8 for Packet
+	NetId: number,                              -- small integer id for the network
 	Kind: "Buff" | "Debuff" | "CC",
 	Tags: { [string]: true },                   -- "Stun", "Slow", "Airborne", "Cleansable", "TenacityAffected"
 	Duration: number,
@@ -165,7 +165,7 @@ function StatusController.new(owner: Model, stats)
 	return setmetatable({
 		Owner = owner, Stats = stats,
 		Active = {} :: { [string]: { Def: any, Stacks: number, EndsAt: number, Source: any } },
-		Applied = Signal.new(), Removed = Signal.new(),   -- (id, instance)
+		Applied = Deps.Signal.new(), Removed = Deps.Signal.new(),   -- (id, instance)
 	}, StatusController)
 end
 
@@ -202,6 +202,19 @@ function StatusController:_RebuildModifiers(id, inst)
 	end
 end
 
+function StatusController:SetIntensity(id: string, stacks: number, now: number)   -- for meters that drive a debuff (Exhaustion)
+	local def = Effects[id]
+	local inst = self.Active[id]
+	if not inst then
+		inst = { Def = def, Stacks = stacks, EndsAt = math.huge, Source = nil }
+		self.Active[id] = inst
+		self.Applied:Fire(id, inst)
+	else
+		inst.Stacks = stacks
+	end
+	self:_RebuildModifiers(id, inst)
+end
+
 function StatusController:Can(action: "Move" | "Rotate" | "Attack" | "Defend" | "Dodge"): boolean
 	for _, inst in self.Active do
 		local b = inst.Def.Blocks
@@ -222,12 +235,26 @@ end
 - The slow rule ("strongest slow only") lives in the MoveSpeed computation: collect `Slow` modifiers separately and apply `max`.
 - `Can()` gates intents on the server and drives client prediction (client mirrors the replicated effects).
 
+Exhausted definition:
+```luau
+Effects.Exhausted = {
+	Id = "Exhausted", NetId = 20, Kind = "Debuff", Tags = { Exhaustion = true },
+	Duration = math.huge, StackMode = "Intensity", MaxStacks = 10,
+	Modifiers = {                                   -- applied per intensity level (PercentMult compounds: 0.94^n)
+		{ Stat = "AttackSpeed", Kind = "PercentMult", Value = 0.94 },
+		{ Stat = "MoveSpeed", Kind = "PercentMult", Value = 0.96 },
+		{ Stat = "PostureDamageTaken", Kind = "PercentAdd", Value = 0.08 },
+		{ Stat = "RecoveryTime", Kind = "Flat", Value = 0.05 },
+	},
+}
+```
+
 ## 7. Replication
 
 ```luau
 -- Net
-EffectApplied = Packet("S_Effect", Packet.Instance, Packet.NumberU8, Packet.NumberU8, Packet.NumberF64),  -- target, NetId, stacks, endsAt (server time)
-EffectRemoved = Packet("S_EffectEnd", Packet.Instance, Packet.NumberU8),
+EffectApplied = Net.Define("S_Effect", { "Instance", "U8", "U8", "F64" }),  -- target, NetId, stacks, endsAt (server time)
+EffectRemoved = Net.Define("S_EffectEnd", { "Instance", "U8" }),
 ```
 Clients keep a mirror for UI icons, movement lock and VFX. The server is the authority for damage/CC.
 
@@ -239,9 +266,11 @@ Clients keep a mirror for UI icons, movement lock and VFX. The server is the aut
 | Parried | `Stagger` (Stun ~0.6s) |
 | Guard broken | `GuardBroken` (Stun ~1.2s, posture reset) |
 | Knockback finisher | `Airborne` (not T) |
-| Exhausted | `Exhausted` (Slow 30% + Blocks Dodge/Defend) |
+| Exhaustion stacks past threshold | `Exhausted` (Intensity, set via `SetIntensity`, per level: AttackSpeed ×0.94, PostureDamageTaken +8%, MoveSpeed ×0.96; no duration, removed when stacks fall below threshold) |
+| Combo breaker | `BreakerIFrames` (Invulnerable 0.4 s, Unstoppable) |
+| Perfect dodge | `FollowUpReady` (buff, 0.45 s, enables the follow-up AttackDef) |
 | Limb break: arm | `Disarm` side-arm or `Cripple` (see game.combat.limb-damage) |
 | Limb break: leg | `Slow` + `Grounded` |
 | Limb break: head | `Blind` / `Nearsight` |
 | Limb break: torso | `Bleed` (DoT, Independent) + `GrievousWounds` |
-| Perfect dodge | `Haste` + `Empowered` (next attack bonus) |
+| Perfect dodge (optional extra) | `Haste` + `Empowered` (next attack bonus) |

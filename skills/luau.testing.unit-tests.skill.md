@@ -16,48 +16,29 @@ For this project the high-value targets are the **pure** modules in `ReplicatedS
 
 Tests let you change balance or refactor and know instantly if parry/dodge logic broke. Design consequence: keep the logic **free of Instances and clocks** (pass `now`, CFrames and states in as arguments).
 
-## 2. Zero-dependency runner (Studio)
+## 2. TestKit (this repo: `src/ReplicatedStorage/TestKit.luau`)
+
+Zero dependencies, about 150 lines. Specs are ModuleScripts named `*.spec`. `src/ServerScriptService/Tests/RunTests.server.luau` runs every spec under its folder when you press **Play in Studio** and does nothing in live servers. Results go to Output.
 
 ```luau
--- ServerScriptService/Tests/RunTests (Script, disable before publishing or gate with RunService:IsStudio())
-local Results = { Passed = 0, Failed = 0 }
+-- ServerScriptService/Tests/Directions.spec  (ModuleScript)
+local Directions = require(game.ReplicatedStorage.Combat.Directions)
 
-local function Test(name: string, fn: () -> ())
-	local ok, err = pcall(fn)
-	if ok then Results.Passed += 1 else Results.Failed += 1 ; warn(`FAIL {name}: {err}`) end
-end
-
-local function Eq(actual, expected, msg: string?)
-	if actual ~= expected then error(`{msg or ""} expected {tostring(expected)}, got {tostring(actual)}`, 2) end
-end
-
-for _, module in script.Parent:GetChildren() do
-	if module:IsA("ModuleScript") and module.Name:match("%.spec$") then
-		require(module)(Test, Eq)
-	end
-end
-print(`Tests: {Results.Passed} passed, {Results.Failed} failed`)
-```
-
-```luau
--- Tests/Resolver.spec (ModuleScript)
-local Resolver = require(game.ReplicatedStorage.Combat.Resolver)
-return function(Test, Eq)
-	local front = CFrame.new(0, 0, 0)
-	local facing = CFrame.lookAt(Vector3.new(0, 0, -5), Vector3.zero)
-
-	Test("idle defender gets hit", function()
-		Eq(Resolver.Resolve({ Kind = "M1" }, nil, front, facing, { State = "Idle" }, 0), "Hit")
-	end)
-	Test("knockback attack is blocked, not guard broken", function()
-		local out = Resolver.Resolve({ Kind = "M1", Knockback = {} }, "Back", front, facing, { State = "Blocking", Posture = 100 }, 0)
-		Eq(out, "Blocked")
-	end)
-	Test("wrong-direction parry is punished", function()
-		Eq(Resolver.Resolve({ Kind = "Directional" }, "Right", front, facing, { State = "Parrying", ParryDir = "Right", ParryStart = 0 }, 0.05), "Hit")
+return function(Describe, It, Expect)
+	Describe("Matches", function()
+		It("Mirrored: parry the side the attack comes from", function()
+			Expect(Directions.Matches("Mirrored", "Right", "Left", "Left")).ToBe(true)
+		end)
+		It("rejects a missing direction", function()
+			Expect(Directions.Matches("Mirrored", "Right", "Left", nil)).Never.ToBe(true)
+		end)
 	end)
 end
 ```
+Matchers: `ToBe`, `ToEqual` (deep), `ToBeNear(n, eps?)`, `ToBeTruthy`, `ToBeFalsy`, `ToBeNil`, `ToThrow(pattern?)`, and `.Never.` to invert.
+API: `TestKit.Run({ModuleScript})`, `TestKit.RunIn(root)`, `TestKit.Report(results)`. A spec that fails to load counts as a failure and doesn't stop the others.
+
+Without Rojo: create the ModuleScripts by hand with the same names (`TestKit` in ReplicatedStorage, the `Tests` folder in ServerScriptService, `RunTests` as a Script).
 
 ## 3. TestEZ (Roblox's classic BDD framework)
 
@@ -99,8 +80,9 @@ local Cases = {
 	{ "Directional", "Left",  { State = "Parrying", ParryDir = "Right" }, "Parried" },  -- mirrored rule
 	{ "Directional", "Left",  { State = "Dodging", DodgeDir = "Left" },   "PerfectDodge" },
 }
+-- inside a spec's returned function(Describe, It, Expect):
 for i, c in Cases do
-	Test(`case {i}`, function() Eq(Resolve(c[1], c[2], c[3]), c[4]) end)
+	It(`case {i}: {c[1]} vs {c[3].State}`, function() Expect(Resolve(c[1], c[2], c[3])).ToBe(c[4]) end)
 end
 ```
 Add a row whenever a bug is found so it can't come back.

@@ -24,7 +24,7 @@ description: Roblox physics for combat movement - BasePart physics props (Assemb
 - Each player's **client owns its character physics**. Velocities/impulses applied **on the server** to a player's HumanoidRootPart are overwritten by the owning client's simulation -> knockback "doesn't work" or stutters.
 - Options:
   1. **Constraint created by server** (LinearVelocity in the root) - the instance replicates and the owning client simulates it. Works, but arrives after ~ping.
-  2. **Tell the victim's client** (Packet `Knockback(direction, force, duration)`) to apply it locally - smooth for the victim, also server-validated.
+  2. **Tell the victim's client** (a `Knockback(direction, force, duration)` channel) to apply it locally - smooth for the victim, also server-validated.
   3. Temporarily `root:SetNetworkOwner(nil)` (server simulates) - laggy for the victim; reserve for grabs/cutscenes.
 - NPCs (no player) are owned by the server (or auto-assigned to nearby clients! set `root:SetNetworkOwner(nil)` on NPC roots to keep them server-owned for consistent combat).
 - `ApplyImpulse` only works where the part is simulated (owner).

@@ -70,7 +70,7 @@ Tags replicate. Use tags for "dummies", "breakables", hitbox-ignore parts.
 - `require(moduleScript)` runs the module **once per VM** (server is one VM; each client is one VM) and caches the return value. The same module required on server and client = two separate copies of state.
 - Must return exactly one value.
 - Cyclic requires error -> break cycles with lazy requires inside functions or dependency injection.
-- Require by string path (newer): `require("./Signal")`, `require("@game/ReplicatedStorage/Packages/Packet")` - verify Studio support/aliases before relying on it.
+- Require by string path (newer): `require("./Signal")`, `require("@game/ReplicatedStorage/Core/Net")` - verify Studio support/aliases before relying on it.
 - A module erroring during require = every future require of it errors.
 
 "Dual context" module = ModuleScript in ReplicatedStorage with no `RunService:IsServer()` branches; side-specific code is **injected** by the server/client entry scripts (adapters, signal connections).
@@ -134,16 +134,17 @@ Mark weapon parts `CanCollide=false`, `Massless=true`, `CanQuery=false` (hitboxe
 
 ```
 ReplicatedStorage
-├─ Packages        (Packet, GoodSignal)
+├─ Core            (Deps, Signal, Net, Hitbox, Maid - built-in contracts)
+├─ Packages        (optional third-party adapters)
 ├─ Combat
 │  ├─ WeaponClass  (dual-context constructor)
 │  ├─ Types / Enums / Config
 │  ├─ Resolver     (pure outcome logic)
-│  ├─ Net          (Packet definitions)
+│  ├─ Net          (channel definitions)
 │  └─ Weapons      (definition modules)
 └─ Assets (Animations, VFX, Models)
 ServerScriptService
-├─ Packages/ProfileStore
+├─ Core/SessionStore
 └─ CombatServer (entry)   + Data (profiles)
 StarterPlayerScripts
 └─ CombatClient (entry)

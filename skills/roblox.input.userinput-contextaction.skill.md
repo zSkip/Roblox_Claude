@@ -177,10 +177,10 @@ end
 With shift-lock / `Humanoid.AutoRotate`, camera and character face the same way, so keys == character directions. Decide per game; most directional-combat games lock the character to camera while in combat.
 
 ### Input -> intent -> network
-Client converts raw input into a small **intent** (`Action`, `Direction`, `Timestamp`) and fires a Packet. Server validates against its own state. Never send key codes as authority.
+Client converts raw input into a small **intent** (`Action`, `Direction`, `Timestamp`) and fires a Net channel. Server validates against its own state. Never send key codes as authority.
 
 ### Rebinding storage
-Store `Enum.KeyCode.Name` strings in ProfileStore (`"F"`), restore with `Enum.KeyCode[name]` (wrap in `pcall` or check `Enum.KeyCode:FromName(name)`).
+Store `Enum.KeyCode.Name` strings in the player's saved profile (`"F"`), restore with `Enum.KeyCode[name]` (wrap in `pcall` or check `Enum.KeyCode:FromName(name)`).
 
 ### Edge cases
 - Clear held state on `UserInputService.WindowFocusReleased` (alt-tab while holding F).

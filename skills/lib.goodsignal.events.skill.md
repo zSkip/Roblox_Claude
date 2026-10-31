@@ -5,6 +5,8 @@ description: stravant's GoodSignal (Batched Yield-Safe Signal) for Luau - full A
 
 # GoodSignal (stravant) — Custom Events
 
+> **Optional adapter.** Nothing in this skill set requires GoodSignal. Game code uses the `SignalLike` contract (core.contracts.interfaces §1), which has a built-in FIFO implementation. The full GoodSignal source below is also self-contained if you prefer it. Remember it runs handlers **LIFO**.
+
 Gist: `https://gist.github.com/stravant/b75a322e0919d60dde8a0316d1f09d2f` (MIT, "Good Roblox Signal Implementation", file `GoodSignal.lua`).
 Behaves like `RBXScriptSignal` but is pure Luau, fires **immediately** (synchronously spawns handlers) and reuses one coroutine for handlers that don't yield.
 

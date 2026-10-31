@@ -1,11 +1,11 @@
 ---
 name: roblox.data.datastore-messaging-memory
-description: Roblox cloud data services underneath ProfileStore - DataStoreService (GetDataStore, GlobalDataStore/DataStore methods, OrderedDataStore for leaderboards, options, budgets, limits), MessagingService (PublishAsync/SubscribeAsync), MemoryStoreService (SortedMap, Queue, HashMap), game:BindToClose, Studio API access. Use for leaderboards, cross-server features, or understanding ProfileStore internals.
+description: Roblox cloud data services (what any session store is built on) - DataStoreService (GetDataStore, GlobalDataStore/DataStore methods, OrderedDataStore for leaderboards, options, budgets, limits), MessagingService (PublishAsync/SubscribeAsync), MemoryStoreService (SortedMap, Queue, HashMap), game:BindToClose, Studio API access. Use for leaderboards, cross-server features, or understanding ProfileStore internals.
 ---
 
 # Roblox — DataStore, MessagingService, MemoryStore
 
-Player profiles: use **ProfileStore** (lib.profilestore.datastore). Use raw services for leaderboards, global/cross-server data.
+Player profiles: use a session-locked store (the SessionStore contract in core.contracts.interfaces has a built-in implementation; ProfileStore is an optional adapter). Use raw services for leaderboards and global/cross-server data.
 
 ## 1. DataStoreService (server only)
 
@@ -33,15 +33,15 @@ DataStore methods (all yield, wrap in `pcall`):
 
 OrderedDataStore (integers only): `:GetSortedAsync(ascending, pageSize, minValue?, maxValue?)` -> `DataStorePages` (`:GetCurrentPage()` -> `{ {key, value} }`, `:AdvanceToNextPageAsync()`, `.IsFinished`), plus Get/Set/Update/Increment/Remove.
 
-Limits (approximate; check docs for current values): value up to 4 MB per key, key name ≤ 50 chars, store name ≤ 50 chars; per-server request budget scales with players (roughly 60 + 10×players per minute for get/set categories). Same key writes ≥ 6s apart. Values: JSON-able tables (see ProfileStore data rules), strings, numbers, booleans, buffers.
+Limits (approximate; check docs for current values): value up to 4 MB per key, key name ≤ 50 chars, store name ≤ 50 chars; per-server request budget scales with players (roughly 60 + 10×players per minute for get/set categories). Same key writes ≥ 6s apart. Values: JSON-able tables (no NaN, no mixed or sparse tables, no userdata - serialize Vector3/CFrame/EnumItem), strings, numbers, booleans, buffers.
 
-Studio: Game Settings -> Security -> "Enable Studio Access to API Services" (writes live data!). Use `ProfileStore.Mock` in Studio.
+Studio: Game Settings -> Security -> "Enable Studio Access to API Services" (writes live data!). Use a mock/in-memory store in Studio (swap the store implementation when `RunService:IsStudio()`).
 
 ## 2. game:BindToClose
 
 ```luau
 game:BindToClose(function()
-	-- up to ~30s to finish saving; ProfileStore already hooks this for its profiles
+	-- up to ~30s to finish saving; end all live sessions here
 	if game:GetService("RunService"):IsStudio() then task.wait(1) end
 end)
 ```
@@ -56,7 +56,7 @@ end)
 MessagingService:PublishAsync("Topic", { Kind = "Announcement", Text = "Event!" })  -- payload ≤ 1 KB
 conn:Disconnect()
 ```
-Not guaranteed delivery; rate limits per server and per topic. ProfileStore uses it to speed session hand-off.
+Not guaranteed delivery; rate limits per server and per topic. Session stores can use it to ask the owning server to release a session early.
 
 ## 4. MemoryStoreService (fast, expiring, cross-server)
 
@@ -77,8 +77,8 @@ Max expiration 45 days; data is not durable - use for matchmaking, live leaderbo
 
 | Need | Service |
 |---|---|
-| Player progress, weapons owned, keybinds | ProfileStore |
+| Player progress, weapons owned, keybinds | SessionStore (session-locked UpdateAsync) |
 | All-time kills leaderboard | OrderedDataStore (write on session end / periodically) |
 | Live server-wide event | MessagingService |
 | Ranked queue / duel matchmaking | MemoryStore Queue/SortedMap + TeleportService |
-| Gifting weapons to offline friends | `ProfileStore:MessageAsync` |
+| Gifting weapons to offline friends | UpdateAsync an inbox list on the recipient's key; process it on their next session |

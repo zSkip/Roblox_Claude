@@ -5,6 +5,8 @@ description: MadStudio ProfileStore (loleris) - session-locked, auto-saving Data
 
 # ProfileStore (MadStudio / loleris)
 
+> **Optional adapter.** Nothing in this skill set requires ProfileStore. Persistence uses the `SessionStore` contract (core.contracts.interfaces §4), which has a built-in session-locked DataStore implementation. ProfileStore is the production-grade drop-in: faster cross-server hand-off, critical-state handling, mock store and message queue. The data rules in §6 apply to any DataStore-backed store.
+
 Repo: `https://github.com/MadStudioRoblox/ProfileStore` (single ModuleScript `ProfileStore.luau`).
 **Server only** -> put in `ServerScriptService` (or ServerStorage). Uses DataStoreService + MessagingService.
 Methods ending in `Async` **yield**.

@@ -1,6 +1,6 @@
 ---
 name: game.combat.hit-validation-multiclient
-description: Client-side hit detection with multi-client validation for Roblox melee - attacker client detects (HitboxClass), server validates claims with state/timing/rewind checks, victim client corroborates borderline claims through a Packet request/response, optional witness clients sample claims for a per-player trust score. Covers position history ring buffers, leniency formulas, defender-state history for parry/dodge timing, packets, and flagging. Use when implementing or tuning hit registration.
+description: Client-side hit detection with multi-client validation for Roblox melee - attacker client detects (any HitboxQuery), server validates claims with state/timing/rewind checks, victim client corroborates borderline claims through a request/response channel, optional witness clients sample claims for a per-player trust score. Covers position history ring buffers, leniency formulas, defender-state history for parry/dodge timing, packets, and flagging. Use when implementing or tuning hit registration.
 ---
 
 # Client Hit Detection + Multi-Client Validation
@@ -9,7 +9,7 @@ description: Client-side hit detection with multi-client validation for Roblox m
 
 | Role | Job | Can it lie? |
 |---|---|---|
-| **Attacker client** | runs the hitbox (HitboxClass, client-local) during the Active window and sends hit **claims** | yes - claims are untrusted |
+| **Attacker client** | runs the hitbox query (`Deps.Hitbox`, client-local) during the Active window and sends hit **claims** | yes - claims are untrusted |
 | **Server** | judge: state, timing, cooldown, rewound geometry, outcome (block/parry/dodge), damage | authority |
 | **Victim client** | owns its character physics; on request, reports its own view of the moment ("was I in range / in i-frames?") | yes - so its vote is only a tie-breaker |
 | **Witness clients** (optional) | third parties near both, sampled to cross-check claims | yes individually; useful statistically |
@@ -20,7 +20,7 @@ Principle: a claim must pass the **server's hard checks** (always). Inside a **l
 
 ```
 Attacker input ─► C_Intent(Attack, dir, t) ─► Server: validate, state=Attacking(ActionId), S_Action broadcast
-Attacker client: Active window → HitboxClass HitSomeone → C_HitClaim(ActionId, target, t, attackerCF)
+Attacker client: Active window → Hitbox.Hit → C_HitClaim(ActionId, target, t, attackerCF)
 Server:
   1. hard checks (fail → drop, maybe flag)
   2. geometric check at rewound time:  clear pass → resolve
@@ -29,14 +29,14 @@ Server:
   4. Sometimes (e.g. 10% of claims, or always for low-trust players) ask a witness → trust update (async)
 ```
 
-## 3. Packets
+## 3. Channels (core.contracts.interfaces NetChannel)
 
 ```luau
-HitClaim  = Packet("C_HitClaim", Packet.NumberU16, Packet.Instance, Packet.NumberF64, Packet.CFrameF32U16), -- ActionId, Target, ClientServerTime, AttackerCF
-HitCheck  = Packet("S_HitCheck", Packet.Instance, Packet.NumberF64, Packet.NumberU8):Response(Packet.NumberU8),  -- Attacker, Time, SpecId -> verdict 0=no opinion 1=agree 2=disagree
-Witness   = Packet("S_Witness", Packet.Instance, Packet.Instance, Packet.NumberF64):Response(Packet.NumberF16),    -- Attacker, Target, Time -> distance seen
+HitClaim = Net.Define("C_HitClaim", { "U16", "Instance", "F64", "CFrame" })                    -- ActionId, Target, ClientServerTime, AttackerCF
+HitCheck = Net.Request("S_HitCheck", { "Instance", "F64", "U8" }, { "U8" }, 0.15)               -- Attacker, Time, SpecId -> 0 no opinion / 1 agree / 2 disagree
+Witness  = Net.Request("S_Witness", { "Instance", "Instance", "F64" }, { "F32" }, 0.5)          -- Attacker, Target, Time -> distance seen
 ```
-Set `HitCheck.ResponseTimeout = 0.15 ; HitCheck.ResponseTimeoutValue = 0` (no answer = no opinion). Packet allows 128 outstanding responses per player.
+A timeout returns the default (`0` = no opinion). The server must never wait on a client without a timeout.
 
 ## 4. Position history (server)
 
@@ -117,7 +117,7 @@ end
 
 ```luau
 -- server, inside a task.spawn so the claim handler doesn't block
-local verdict = Net.HitCheck:FireClient(victimPlayer, attacker.Model, t, specId)   -- yields ≤ 0.15 s
+local verdict = HitCheck:Invoke(victimPlayer, attacker.Model, t, specId) or 0     -- yields ≤ 0.15 s
 if verdict == 2 then drop() elseif verdict == 1 or verdict == 0 then accept() end   -- no opinion → accept borderline
 ```
 Victim client answers from its own interpolation buffer: was the attacker's hitbox (built from the schema) within X studs of my root at time t on my screen?

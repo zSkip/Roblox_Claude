@@ -5,6 +5,8 @@ description: The user's own Indexer networking module (IndexerV2) - identifier-r
 
 # Indexer (project networking module)
 
+> **Optional adapter.** Game code uses the `NetChannel` contract (core.contracts.interfaces §2). Your Indexer can implement that contract (adapter note in core.contracts.interfaces §2), or keep handling non-combat traffic.
+
 Purpose: route messages by **string identifier** over one or more RemoteEvents. An identifier defined on both sides forms a channel; `:Connect` registers handlers, `:Recursive` sends on the object's own identifier, `Indexer.Fire` sends on any identifier.
 
 ## 1. API

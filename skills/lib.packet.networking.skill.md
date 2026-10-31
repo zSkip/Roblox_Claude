@@ -5,6 +5,8 @@ description: Suphi Kaner's "Packet" networking library (v1.7.x) - typed, buffer-
 
 # Packet — Networking Library (Suphi Kaner / 5uphi)
 
+> **Optional adapter.** Nothing in this skill set requires Packet. Game code uses the `NetChannel` contract (core.contracts.interfaces), which has a built-in RemoteEvent implementation. This file documents Packet so it can be plugged in as a faster, smaller transport (see the Packet adapter in core.contracts.interfaces §2). The size/encoding facts here also help if you add `buffer` packing to the built-in channel yourself.
+
 Source of truth for this file: the library source (v1.7.x, `init.luau`, `Signal.luau`, `Task.luau`, `Types/*.luau`).
 DevForum thread: `https://devforum.roblox.com/t/packet-networking-library/3573907`.
 

@@ -5,6 +5,8 @@ description: RedTrioVirus HitboxClass (v1.2.0) - OOP spatial-query hitbox module
 
 # HitboxClass (RedTrioVirus) — v1.2.0
 
+> **Optional adapter.** Nothing in this skill set requires HitboxClass. Hit detection uses the `HitboxQuery` contract (core.contracts.interfaces §3), which has a built-in OverlapParams implementation with no folder requirement. This file documents HitboxClass for when you want its extra modes (magnitude, velocity prediction, Timer).
+
 Repo/releases: `https://github.com/RedTrioVirus/HitboxClass/releases` (tags v1.0, v1.1, v1.1A, v1.1B, v1.2.0 adds `SetSize`). MIT.
 Wally: `HitboxClass = "redtriovirus/hitboxclass@1.2.0"` (depends on `sleitnick/signal@2.0.3`, **not** GoodSignal).
 
@@ -113,7 +115,7 @@ It does **not** check distance, timing, facing, rate or that the attacker is att
 
 Other costs: one raw RemoteEvent with uncompressed tables, a 1.5 s yield to create each client hitbox, a round-trip of command messages per swing.
 
-**Project decision (client-side detection + multi-client validation):** create HitboxClass hitboxes **directly on the attacker's client** (plain `HitboxClass.new` on the client, no `UseClient`), reuse one per weapon runtime, and report hits through our Packet `C_HitClaim` with the swing's ActionId. The server validates with the rules in `game.combat.hit-validation-multiclient`. HitboxClass is used purely as the client-side query engine.
+**If used as the adapter (client-side detection + multi-client validation):** create HitboxClass hitboxes **directly on the attacker's client** (plain `HitboxClass.new`, no `UseClient`), reuse one per weapon runtime, and forward `HitSomeone` models to the `HitboxQuery.Hit` signal. Claims then go through the game's own Net channel and are validated per `game.combat.hit-validation-multiclient`.
 
 ## 6. Limitations to remember
 

@@ -62,7 +62,7 @@ conn:Disconnect()
 ### SignalBehavior (Workspace.SignalBehavior)
 - `Deferred` (default for new places): engine event handlers run at the next resumption point, not inline when the property changes. Multiple changes in one frame -> handlers see final state. Code that fires an event and expects listeners to have run immediately will break.
 - `Immediate`: legacy inline behaviour.
-- GoodSignal (custom) is always immediate regardless.
+- Custom Luau signals (core.contracts.interfaces SignalLike) are always immediate regardless.
 
 ## 4. Clocks
 

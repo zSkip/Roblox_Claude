@@ -75,5 +75,5 @@ Open MicroProfiler (Ctrl+F6 / Ctrl+Alt+F6 in client), Developer Console (F9) -> 
 
 1. Input handler: O(1) table lookups (`KeyToDirection[input.KeyCode]`), no allocations.
 2. Hitbox: one query per active hit window, `OverlapParams` filter = attacker's character; dedupe hits with a per-swing `{[Model]: true}` table reused per swing.
-3. Network: one packet per action (Packet batches per frame), numbers quantised.
+3. Network: one message per action (the channel layer batches per frame), numbers quantised.
 4. Animations: load tracks once per character, never per swing.

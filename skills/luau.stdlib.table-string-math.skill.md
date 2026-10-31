@@ -135,7 +135,7 @@ buffer.fill(b, off, value, count?)
 buffer.fromstring(s)  buffer.tostring(b)
 buffer.readbits(b, bitOffset, bitCount)  buffer.writebits(b, bitOffset, bitCount, value)  -- up to 32 bits
 ```
-Out-of-range access errors. Buffers are sent over remotes efficiently and are DataStore-safe (Packet builds on these).
+Out-of-range access errors. Buffers are sent over remotes efficiently and are DataStore-safe (good for compact network/save encodings).
 
 ## 9. vector (Luau native)
 

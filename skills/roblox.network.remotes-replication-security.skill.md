@@ -21,20 +21,20 @@ description: Roblox client-server model - replication rules (what replicates whi
 | `RemoteFunction` | both | `InvokeServer(...)` (yields, returns), `OnServerInvoke = fn(player, ...)`; **never** `InvokeClient` from server (client can hang it forever / error) |
 | `BindableEvent` / `BindableFunction` | same machine | `Fire`/`Event`, `Invoke`/`OnInvoke`; copies tables (no metatables) |
 
-Packet (lib.packet.networking) wraps one RemoteEvent with buffer serialization and frame batching - use it for all gameplay traffic.
+Wrap one RemoteEvent in typed, batched channels (the NetChannel contract in core.contracts.interfaces has a built-in implementation) and use it for all gameplay traffic.
 
 ### Argument serialization rules (raw remotes)
 - Allowed: nil, boolean, number, string, buffer, tables, Instances (as references), Roblox datatypes (Vector3, CFrame, Color3, EnumItem...).
 - Functions / threads -> nil. Metatables stripped.
 - Tables: mixed keys -> only one part survives; non-string keys in dictionaries converted/dropped; `nil` holes truncate arrays.
 - Instances the receiver can't see (ServerStorage, not streamed in) arrive as `nil`.
-- Roughly: keep each remote call small; Roblox throttles total bandwidth per player (~50 KB/s is a practical ceiling). Packet's buffers keep payloads tiny.
+- Roughly: keep each remote call small; Roblox throttles total bandwidth per player (~50 KB/s is a practical ceiling). Packing numbers into a `buffer` keeps payloads tiny.
 
 ## 3. Attributes & ValueObjects for state replication
 
 - `Instance:SetAttribute` on the server replicates to all clients - easy "public" state (`Blocking`, `Stunned`, `Stamina`). Changes coalesce per frame.
 - Clients listen via `GetAttributeChangedSignal`.
-- For private state (stamina of local player only), send via Packet `FireClient`.
+- For private state (stamina of local player only), send via a channel's `FireClient`.
 
 ## 4. StreamingEnabled
 
@@ -48,7 +48,7 @@ Packet (lib.packet.networking) wraps one RemoteEvent with buffer serialization a
 Assume an exploiter can: fire any remote with any arguments at any rate, read all client code and replicated instances, move their character anywhere (they own its physics), change their WalkSpeed, play any animation, spoof timestamps.
 
 Validation checklist for every incoming combat message:
-1. **Types & ranges**: Packet guarantees types; still check enum ranges (`action <= MAX`), finite numbers (`x == x and x ~= math.huge`), instance class (`typeof(x) == "Instance" and x:IsA("Model")`).
+1. **Types & ranges**: the channel layer checks types; still check enum ranges (`action <= MAX`), finite numbers (`x == x and x ~= math.huge`), instance class (`typeof(x) == "Instance" and x:IsA("Model")`).
 2. **State**: is the player alive, holding this weapon, in a state that allows the action (not stunned, not mid-attack unless cancel window)?
 3. **Cooldown / rate**: server-side timestamps (`os.clock()` on server), not client times.
 4. **Resources**: stamina/exhaustion checked and deducted on the server.
@@ -78,7 +78,7 @@ Players.PlayerRemoving:Connect(function(p) Buckets[p] = nil end)
 
 - **Client prediction**: on input, the client immediately plays the animation / enters the state locally, fires intent to server. Server validates; if rejected, server tells client to cancel (reconcile).
 - **Server reconciliation**: server sends authoritative state changes (`StateChanged(actor, state, serverTime)`); client snaps to it if different.
-- **Other players**: their animations come through their Animator replication; their state through Packet/attributes. Expect ~ping/2 + frame delays.
+- **Other players**: their animations come through their Animator replication; their state through channels/attributes. Expect ~ping/2 + frame delays.
 - **Parry fairness**: defender's parry press is judged at server receive time (biased against the defender by their ping) unless you accept the client's timestamp with bounded rewind. Common: `effectiveTime = clamp(clientTime, serverRecv - min(ping, 0.2), serverRecv)`.
 - **Hit confirmation**: show hit FX only when the server confirms (consistent) or predictively with rollback (snappy). Damage numbers always from server.
 
@@ -87,4 +87,4 @@ Players.PlayerRemoving:Connect(function(p) Buckets[p] = nil end)
 - One `Net` shared module that defines all packets; both entry scripts require it.
 - Server -> clients broadcast of combat actions: send small ids (actor instance, action id, direction id, combo index), each client looks up the schema locally to know animations/VFX.
 - Don't replicate per-frame positions yourself - character physics already replicates.
-- Use `UnreliableRemoteEvent` (or a dedicated unreliable Packet layer) for cosmetic spam like trails or camera shake of others.
+- Use `UnreliableRemoteEvent` (or an unreliable channel) for cosmetic spam like trails or camera shake of others.

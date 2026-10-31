@@ -18,45 +18,46 @@ description: Directional limb-targeting system for R6 - direction-to-limb mappin
 
 R6 parts: `Head`, `Torso`, `Left Arm`, `Right Arm`, `Left Leg`, `Right Leg` (+ `HumanoidRootPart`).
 
-Default mapping (attacker's input → defender limb), **mirrored** because the fighters face each other:
+Limb **groups** are registered data. Attacks reference a group by key through `AttackDef.Target` (game.combat.architecture-patterns §6), so the mapping lives on the attacks, not in limb code.
 
-| Attacker input | Swing comes from | Defender limb | Break effect (suggested) |
-|---|---|---|---|
-| D + M1 (Right) | attacker's right | defender's **Left Arm** | `Disarm`-lite: that arm's block is weaker / `Cripple` |
-| A + M1 (Left) | attacker's left | defender's **Right Arm** (weapon arm) | `Disarm` (no M1 for N s) |
-| W + M1 (Front) | straight on | defender's **Torso** (or Head) | `Bleed` DoT + `GrievousWounds` (or `Blind` if Head) |
-| S + M1 (Back) | low / sweep | defender's **Legs** (one meter for both, or the leg on the attacker's weapon side) | `Slow` + `Grounded` (no dodge). S+M1 still knocks back |
+Current directional M1 targets (mirrored because the fighters face each other):
 
-Keep the mapping in the weapon schema so it is configurable:
+| Attacker input | Defender limb group | Notes |
+|---|---|---|
+| D + M1 (Right) | **Left Arm** | swing from attacker's right lands on defender's left |
+| A + M1 (Left) | **Right Arm** | |
+| W + M1 (Front) | **Torso** | |
+| S + M1 (Back) | **Torso** | still knockback |
+| *(future attacks)* | **Legs**, **Head** | registered now, targeted by later AttackDefs (e.g. a sweep, an overhead) |
+
 ```luau
-LimbTargets = {
-	Right = "Left Arm" ; Left = "Right Arm" ; Front = "Torso" ; Back = "Legs" ;
-} ;
-Limbs = {
-	["Left Arm"]  = { Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Effect = "ArmBroken" ; Decay = 5 } ;
-	["Right Arm"] = { Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Effect = "Disarmed" ; Decay = 5 } ;
-	Torso         = { Max = 120 ; PerHit = 25 ; Chip = 4 ; BurstDamage = 20 ; Effect = "Bleeding" ; Decay = 4 } ;
-	Legs          = { Max = 100 ; PerHit = 30 ; Chip = 3 ; BurstDamage = 12 ; Effect = "Hobbled" ; Decay = 5 } ;
-} ;
+-- Limbs registry (shared, data only)
+local LimbGroups = {
+	["Left Arm"]  = { Parts = { "Left Arm" } ;  Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Decay = 5 ; OnBreak = "LeftArmBreak" } ;
+	["Right Arm"] = { Parts = { "Right Arm" } ; Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Decay = 5 ; OnBreak = "RightArmBreak" } ;
+	Torso         = { Parts = { "Torso" } ;     Max = 120 ; PerHit = 20 ; Chip = 4 ; BurstDamage = 20 ; Decay = 4 ; OnBreak = "TorsoBreak" } ;
+	Legs          = { Parts = { "Left Leg", "Right Leg" } ; Max = 100 ; PerHit = 30 ; Chip = 3 ; BurstDamage = 12 ; Decay = 5 ; OnBreak = "LegsBreak" } ;   -- reserved
+	Head          = { Parts = { "Head" } ;      Max = 80 ;  PerHit = 25 ; Chip = 5 ; BurstDamage = 25 ; Decay = 5 ; OnBreak = "HeadBreak" } ;    -- reserved
+}
+-- Per-weapon overrides: Schema.Limbs[group] merges over these defaults.
 ```
-`Legs` is a logical limb group → highlight both `Left Leg` and `Right Leg`.
+`OnBreak` names a **break handler** (§7). What a break actually does is decided later, without touching the meter code.
 
 ## 3. Server state
 
 ```luau
 -- per combatant runtime (server)
-LimbMeters = { ["Left Arm"] = 0, ["Right Arm"] = 0, Torso = 0, Legs = 0 } ;
+LimbMeters = {} ;   -- [group] = number, created lazily for any registered group
 LimbLastHit = {} ;   -- for decay delay
 
 local function ApplyLimbHit(defender, limb: string, cfg, now)
-	local v = math.min(defender.LimbMeters[limb] + cfg.PerHit, cfg.Max)
+	local v = math.min((defender.LimbMeters[limb] or 0) + cfg.PerHit, cfg.Max)
 	defender.LimbMeters[limb] = v
 	defender.LimbLastHit[limb] = now
 	DealDamage(defender, cfg.Chip, "Physical")
 	if v >= cfg.Max then
 		DealDamage(defender, cfg.BurstDamage, "True")
-		defender.Status:Apply(Effects[cfg.Effect], attacker, now)
-		defender.LimbMeters[limb] = 0                    -- or keep at Max while the effect lasts ("lost limb")
+		BreakHandlers[cfg.OnBreak](defender, attacker, limb, now)   -- pluggable: effect, reset policy, visuals
 		Net.LimbBurst:Fire(defender.Model, LimbId[limb])
 	end
 	Net.Limb:Fire(defender.Model, LimbId[limb], math.floor(v / cfg.Max * 255))  -- U8 fraction for visuals
@@ -89,7 +90,7 @@ local function MeterToTransparency(fraction: number): number
 	return 1 - fraction ^ 1.4             -- slow start, quickly solid near the end
 end
 
-Net.Limb.OnClientEvent:Connect(function(model: Model?, limbId: number, value: number)
+Net.Limb:OnClient(function(model: Model?, limbId: number, value: number)
 	if not model then return end          -- not streamed in
 	local fraction = value / 255
 	for _, part in LimbParts(model, LimbName[limbId]) do       -- "Legs" -> both legs
@@ -102,14 +103,14 @@ Net.Limb.OnClientEvent:Connect(function(model: Model?, limbId: number, value: nu
 	end
 end)
 
-Net.LimbBurst.OnClientEvent:Connect(function(model, limbId)
+Net.LimbBurst:OnClient(function(model, limbId)
 	-- flash solid, burst particles at limb, sound, then fade out
 end)
 ```
 
 ### Incoming-attack telegraph (white)
 ```luau
-Net.Action.OnClientEvent:Connect(function(actor: Model?, action, direction, comboIndex)
+Net.Action:OnClient(function(actor: Model?, action, direction, comboIndex)
 	if not actor or actor == LocalCharacter then return end
 	local h = HighlightPool:Get(actor)                 -- whole model
 	h.FillColor = Color3.new(1, 1, 1) ; h.FillTransparency = 0.6 ; h.OutlineTransparency = 0
@@ -123,8 +124,21 @@ end)
 
 To visually "lose" a limb on burst: set the limb `Transparency = 1` and spawn a detached copy with an impulse (debris). R6 shirts/pants render on the limb parts, so hiding the part hides its clothing. Restore on respawn or effect end. Gameplay effects come from the status effect, not the visual.
 
-## 7. Rules to confirm with the design
+## 7. Break handlers (functionality decided later)
 
-- Whether non-directional (combo) M1s also add limb damage (default: no, they only chip HP).
-- Whether broken limbs stay broken until death or recover after the effect.
-- Whether `Head` is a separate target (e.g. W+M1 while the target is staggered).
+```luau
+export type BreakHandler = (defender: any, attacker: any, group: string, now: number) -> ()
+
+local BreakHandlers: { [string]: BreakHandler } = {}
+
+-- default placeholder: reset meter, apply a generic "Broken" effect, play burst visuals
+local function DefaultBreak(defender, attacker, group, now)
+	defender.LimbMeters[group] = 0
+	defender.Status:Apply(Effects.LimbBroken, attacker, now)    -- tags = { Limb = group }
+end
+for _, key in { "LeftArmBreak", "RightArmBreak", "TorsoBreak", "LegsBreak", "HeadBreak" } do
+	BreakHandlers[key] = DefaultBreak
+end
+-- Later, e.g.: BreakHandlers.RightArmBreak = function(d, a, g, now) d.Status:Apply(Effects.Disarmed, a, now) ; keep meter at Max ... end
+```
+Policies a handler can choose: reset the meter, keep the limb "lost" until the effect ends, keep it until death, or hide the part (literal loss, §6). Combo (non-directional) M1s don't target a limb unless their AttackDef sets `Target`.
