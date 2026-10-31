@@ -82,6 +82,12 @@ Players.PlayerRemoving:Connect(function(p) Buckets[p] = nil end)
 - **Parry fairness**: defender's parry press is judged at server receive time (biased against the defender by their ping) unless you accept the client's timestamp with bounded rewind. Common: `effectiveTime = clamp(clientTime, serverRecv - min(ping, 0.2), serverRecv)`.
 - **Hit confirmation**: show hit FX only when the server confirms (consistent) or predictively with rollback (snappy). Damage numbers always from server.
 
+### Custom replication (this project's direction)
+- **Combat state** (state leaf, timelines, stats, effects, meters, loadout) travels as components over our own `Net`, keyed by `U16` entity ids, with deltas + acks and per-client interest. Attributes and server-built Instances are not used for gameplay.
+- **Shared frame clock:** `Frame = floor(GetServerTimeNow() × 60)`. All timings cross the wire as frames.
+- **Stays on Roblox:** player character physics (network ownership). The server records it into its own position history.
+- Design: `docs/replication-and-validation.md`.
+
 ## 7. Patterns
 
 - One `Net` shared module that defines all packets; both entry scripts require it.

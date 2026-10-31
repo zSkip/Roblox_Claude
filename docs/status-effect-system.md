@@ -133,6 +133,8 @@ The runtime state machine keeps `Stunned` and `GuardBroken` as **names** for ani
 
 ## 9. Networking
 
+> **Superseded by `docs/replication-and-validation.md` §8:** effects replicate as the Replicator's `Effects` component with `StartFrame` / `EndsFrame` on the shared server-time frame clock, and verdicts carry the effects they cause. The channel sketch below assumed receipt-time replication.
+
 Two server → client channels in `CombatNet`, already sketched in the plan:
 
 ```luau

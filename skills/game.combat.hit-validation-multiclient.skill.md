@@ -144,6 +144,17 @@ This makes parries fair for the defender: their parry press (server-timestamped,
 - Predict hit VFX locally (spark, hitstop) on the client hitbox hit. Damage numbers and the defender's reaction come from `S_Result`.
 - On a rejected claim the server sends nothing (or `S_Cancel` for debug). The predicted spark already played, which is a small cosmetic cost.
 
+## 10b. Timeline consensus (project direction)
+
+This project is moving from attacker-only claims to **consensus inside a frame window** (`docs/replication-and-validation.md`):
+1. **Client-initiated timeline.** The attacker sends `C_Propose(seq, attackId, dir, startFrame, speedSeen, origin)` and predicts. The server checks it against chart state *as of `startFrame`* (back-dating ≤ RTT/2 + jitter, capped at about 15 frames) and recomputes everything it can (attack id, speed). It then broadcasts `S_Timeline` in **frames** (60 fps, `Frame = floor(GetServerTimeNow() × 60)`) to every client in combat radius, or sends `S_Reject` → rollback.
+2. **Frame-aligned playback.** Every client schedules phases by frame. Late receivers fast-forward so the first hit frame lands on `ActiveStart` everywhere.
+3. **Validation window** `[ActiveStart − 2, ActiveEnd + 3]` frames. It closes at `ValidateTo + RTT/2`, capped at 12 frames, and the server never waits longer.
+4. **One `C_Observe` per participant.** The attacker sends hits + its CFrame at `hitFrame`. The victim sends its own CFrame/state view. 1–2 server-chosen witnesses send interpolated positions.
+5. **Evaluate:** server hard checks veto. Server-history geometry gives Pass / Borderline / Fail. Votes settle Borderline: the victim confirms, or a witness confirms. A victim denial only counts in the band. Trust scales leniency. The Resolver judges block/parry/dodge from **server chart history** at `hitFrame`, never from client reports.
+
+Clients report geometry and their own inputs. They never report outcomes.
+
 ## 11. Tuning checklist
 
 - Log reasons for every dropped claim in Studio (`OutsideWindow`, `Fail`, `Disagree`) and tune leniency until honest players at 150-200 ms ping rarely drop.

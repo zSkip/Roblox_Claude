@@ -6,6 +6,7 @@ It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for 
 - **V2 (current iteration):** [`docs/combat-system-v2.md`](docs/combat-system-v2.md) covers single-script architecture, animations and frame data, LoL attack speed, the tiered animation lock and what's next.
 - **Status effects (design):** [`docs/status-effect-system.md`](docs/status-effect-system.md) covers effect definitions, StatusController, the starting effect set, how stuns and Exhausted migrate onto it, networking, tests and the rollout order.
 - **State machine refactor (plan):** [`docs/state-machine-refactor.md`](docs/state-machine-refactor.md) moves combat actions, status effects and keybind/input logic onto event-driven statecharts.
+- **Replication & validation (design):** [`docs/replication-and-validation.md`](docs/replication-and-validation.md) covers how effects work today, our own component replication over `Net`, client-initiated frame timelines and multi-client consensus validation.
 - **Plan:** [`docs/combat-system-plan.md`](docs/combat-system-plan.md). It covers the architecture, the review of the current code, the schema, a WeaponClass sketch, combat rules, packets, milestones, open questions and improvement ideas.
 
 ## Skills
