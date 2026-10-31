@@ -19,6 +19,9 @@ Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, clien
 | `src/ServerScriptService/Tests/RunTests.server.luau` | runs every `*.spec` module when you press Play in Studio |
 | `src/ReplicatedStorage/Combat/Directions.luau` (+ spec) | direction mirror/opposite, incoming side, configurable parry / counter-dodge matcher |
 | `src/ReplicatedStorage/Combat/Exhaustion.luau` (+ spec) | in-combat exhaustion stacks, scaling debuff intensity, out-of-combat decay |
+| `src/ReplicatedStorage/Combat/Resolver.luau` (+ spec) | attack vs defense → Outcome (full plan §7 matrix) and per-outcome consequences |
+| `src/ReplicatedStorage/Combat/Attacks.luau` (+ spec) | AttackDef registry: register, priority matching, build from a weapon schema |
+| `src/ReplicatedStorage/Combat/Stats.luau` (+ spec) | LoL stat formulas and the StatBlock modifier container |
 | `default.project.json` | Rojo mapping (optional; or recreate the scripts by hand in Studio) |
 
 Every file follows the `domain.subject.focus.skill.md` naming scheme and stays under 60 KB.

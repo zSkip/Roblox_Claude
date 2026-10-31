@@ -62,12 +62,12 @@ ReplicatedStorage
    │   ├─ Runtime            (per owner: state machine, combo, timers, signals)
    │   └─ State              (Entered/Exited signals, Bind sugar)
    ├─ CombatTypes / CombatEnums / CombatConfig   (ParryRule lives in Config)
-   ├─ Resolver               (pure: attack vs defense → Outcome; unit-tested)
-   ├─ Stats                  (StatBlock: LoL-style stats + modifiers)
+   ├─ Resolver               (pure: attack vs defense → Outcome + Consequences; unit-tested)
+   ├─ Stats                  (pure: LoL formulas + StatBlock modifiers; unit-tested)
    ├─ StatusEffects          (effect definitions + StatusController)
    ├─ Limbs                  (direction → limb mapping, meter math)
    ├─ Directions / Exhaustion (pure, unit-tested: src/ReplicatedStorage/Combat)
-   ├─ Attacks                (AttackDef registry: combo, directional, follow-ups, future specials)
+   ├─ Attacks                (AttackDef registry + FromSchema: combo, directional, follow-ups, future specials; unit-tested)
    ├─ Net                    (channel definitions via Deps.Net, shared)
    └─ Weapons
       └─ LinkedSword         (definition module: schema + state wiring)
@@ -170,7 +170,7 @@ local LinkedSword = WeaponClass.Define({
 
 	Timings = { DirectionalWindow = 0.25 ; InputBuffer = 0.2 } ;
 
-	LimbTargets = { Right = "Left Arm" ; Left = "Right Arm" ; Front = "Torso" ; Back = "Legs" } ;   -- mirrored, R6
+	LimbTargets = { Right = "Left Arm" ; Left = "Right Arm" ; Front = "Torso" ; Back = "Torso" } ;   -- mirrored, R6 (Legs/Head reserved)
 	Limbs = {
 		["Left Arm"]  = { Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Effect = "ArmBroken" } ;
 		["Right Arm"] = { Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Effect = "Disarmed" } ;
@@ -348,7 +348,7 @@ The **client entry** starts the local `Deps.Hitbox` query for the same window an
 | Lag compensation | Yes: server position/state history, rewind bounded to 250 ms. |
 | Combo breaker | **Yes.** Spec in §9. |
 | Rebinds | Saved in the profile (`Keybinds` as Enum names). |
-| Unit tests | **Yes.** `TestKit` + Studio runner + specs for `Directions` and `Exhaustion` are in `src/`. |
+| Unit tests | **Yes.** `TestKit` + Studio runner + specs for `Directions`, `Exhaustion`, `Resolver`, `Attacks` and `Stats` are in `src/`. |
 | W+M1 / S+M1 targets | **Both Torso.** Legs and Head are registered limb groups reserved for future attacks (modular `AttackDef` registry). |
 | Limb break functionality | Decided later. The framework has pluggable `BreakHandlers`. |
 | Directional M1s vs chain | They mix freely; spam is limited by **in-combat exhaustion stacks** (every 1-3 M1s = 1 stack, knockback = heavy stack, past a threshold a scaling debuff). Replaces the stamina bar. |
@@ -363,7 +363,7 @@ The **client entry** starts the local `Deps.Hitbox` query for the same window an
 ### Input (client)
 - **Direction buffer:** keeps the latest W/A/S/D press and its time. The next M1/F/Q press consumes it if within `DirectionalWindow` (0.25 s).
 - **M1:** with a buffered direction → **directional M1** (targets a limb). Without one → **next combo M1** (1-2-3-4; #4 knocks back).
-- **S + M1:** directional Back; always knockback; targets the legs.
+- **S + M1:** directional Back; always knockback; targets the Torso.
 - **F with no buffered direction:** omni **block** immediately (posture). **F + buffered direction:** directional parry window, then block while held. Release ends the block.
 - **Q:** dodge in the buffered direction (default Back), with i-frames. A counter-direction dodge inside the perfect window = perfect dodge → **follow-up window** (0.45 s) for the weapon's follow-up attack.
 - **Combo breaker:** usable only in hitstun; costs exhaustion stacks; removes hitstun, pushes attackers away, short i-frames; long cooldown.
@@ -423,7 +423,16 @@ During a directional attack's startup, cancel into another direction or into idl
 - Plus **diminishing hitstun** (×0.85 per consecutive hit on the same target) so chains naturally loosen.
 
 ### Unit tests (explanation)
-**Now included:** `src/ReplicatedStorage/TestKit.luau`, `src/ServerScriptService/Tests/RunTests.server.luau`, and specs for `Directions` and `Exhaustion`. Press Play in Studio and results print to Output. A unit test is a tiny script that calls one function with fixed inputs and checks the answer. For example: "an idle defender hit by a knockback M1 returns Hit + knockback", or "a block against a knockback returns Blocked, not GuardBreak, when posture is 100". The resolver, stat math, combo index and direction→limb mapping are pure functions, so a table of cases can run in Studio in milliseconds whenever balance changes. If a change breaks parry logic, a test fails before players notice. See `luau.testing.unit-tests` (zero-dependency runner, TestEZ, Jest Lua, Lune).
+**Now included:** `src/ReplicatedStorage/TestKit.luau`, `src/ServerScriptService/Tests/RunTests.server.luau`, and specs for `Directions`, `Exhaustion`, `Resolver` (the full §7 matrix), `Attacks` and `Stats`. Press Play in Studio and results print to Output. A unit test is a tiny script that calls one function with fixed inputs and checks the answer. For example: "an idle defender hit by a knockback M1 returns Hit + knockback", or "a block against a knockback returns Blocked, not GuardBreak, when posture is 100". The resolver, stat math, combo index and direction→limb mapping are pure functions, so a table of cases can run in Studio in milliseconds whenever balance changes. If a change breaks parry logic, a test fails before players notice. See `luau.testing.unit-tests` (zero-dependency runner, TestEZ, Jest Lua, Lune).
+
+### Pure logic modules (milestone M1)
+All live in `src/ReplicatedStorage/Combat`, take `Now` and snapshots as arguments, and touch no Instances or clocks.
+
+| Module | API | Notes |
+|---|---|---|
+| `Resolver` | `Resolve(Attack, Defender, Now, Config?) → Outcome`, `Consequences(Outcome, Spec, Defense?, ChainHits?)`, `IncomingSide`, `OutcomeIds` | Priority: i-frames (PerfectDodge / Dodged) → parry window (Parried, or Hit if wrong direction) → block or parry held past its window (Blocked / GuardBreak; covers everything but the back) → optional Clash → Hit. A directional swing from the front lands mirrored (D → defender's Left); flank and back attacks use the geometric side. `PostureDamageTaken` carries the Exhausted multiplier. `Consequences` applies chip (`BlockDamageMultiplier`), posture, limb target, knockback and diminishing hitstun (×0.85 per chained hit). |
+| `Attacks` | `NewRegistry()`, `:Register(Def)`, `:Match({Button, Direction?, State?, ComboIndex?})`, `:Get(Id)`, `FromSchema(Schema)` | Pattern: `Direction` nil = none, `"Any"` = wildcard. The highest `Priority` wins, and equal priorities keep registration order. `FromSchema` builds `<Id>.M1.<i>`, `<Id>.Directional.<Dir>` (Target from `LimbTargets`) and `<Id>.FollowUp.<Name>` (priority 10, `RequiresState = "FollowUp"`), plus any custom `Schema.Attacks`; specs inherit `Schema.Damage`. Defs are frozen. |
+| `Stats` | `ResistMultiplier`, `EffectiveResist`, `FinalDamage`, `CombinedTenacity`, `CCDuration`, `StrongestSlow`, `Cooldown`, `AttackSpeed`, `Heal`, `NewBlock(Base, Bounds?, OnChanged?)` | StatBlock: `(Base + ΣFlat) × (1 + ΣPercentAdd) × ΠPercentMult`, clamped to bounds; the lowest `Override` wins over everything. `AddModifier` with an existing id replaces it, and `RemoveSource` clears an effect's modifiers. `OnChanged` fires only on real changes (wire it to a `Deps.Signal`), and `Snapshot()` feeds `FinalDamage`. |
 
 ## 10. Networking (Deps.Net channels; Packet adapter in production)
 
@@ -462,7 +471,7 @@ Runtime values (exhaustion, posture, limb meters, effects, combo) are never save
 ## 12. Build order (milestones)
 
 1. **M0 – Core.** `Core/Deps` with contracts and adapters (Packet, GoodSignal, ProfileStore; HitboxClass optional), TestKit + runner, Alive/Effects folders, `CombatTypes/Enums/Config`, `Net`, PlayerData with saved keybinds.
-2. **M1 – Pure logic + tests.** `Directions`, `Exhaustion` (done), Resolver, AttackDef registry matching, StatBlock math, each with specs.
+2. **M1 – Pure logic + tests. ✅ Done.** `Directions`, `Exhaustion`, `Resolver`, `Attacks` (AttackDef registry matching), `Stats` (StatBlock math), each with specs. Details in §9 ("Pure logic modules").
 3. **M2 – WeaponClass.** Define/Instantiate/State/Runtime, schema validation, LinkedSword, Motor6D attach (R6), `Combatant` for players and NPCs.
 4. **M3 – Client input & prediction.** Direction buffer, F block/parry split, intents, M1 chain with placeholder animations, movement locks, shift-lock yaw snap.
 5. **M4 – Server authority.** Intent validation, state machine, posture, exhaustion stacks + debuff, position/state history.
