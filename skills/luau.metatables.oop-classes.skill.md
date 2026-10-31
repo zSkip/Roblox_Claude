@@ -166,6 +166,8 @@ end
 ```
 Add a transition table (`Allowed = { Idle = {Attack=true, Block=true, Dodge=true}, Stunned = {} }`) to centralise rules.
 
+This is the minimal flat version. For events, guards, nested states, `after` timers, run-to-completion and the RobloxStateMachine / Arch libraries, see `roblox.architecture.state-machines`.
+
 ## 8. Maid / Trove cleanup
 
 ```luau

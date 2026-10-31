@@ -106,6 +106,8 @@ Forced transitions (from server: Stunned/Parried/GuardBroken/Knocked/Dead) bypas
 
 Use an `ActionId` counter so delayed callbacks from an interrupted action are ignored.
 
+The stronger form is a statechart: input, hits and timers become events; `Attacking.{Windup, Active, Recovery}` become child states; forced transitions are declared once on the root; and state-owned `after` timers replace the `ActionId` check. See `roblox.architecture.state-machines` §6 and `docs/state-machine-refactor.md`.
+
 ## 5. Input layer (client)
 
 1. Raw input -> **intents**: `Attack(direction?)`, `DefendStart(direction?)`, `DefendEnd`, `Dodge(direction?)`, `Breaker`, `FollowUp`.

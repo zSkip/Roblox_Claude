@@ -5,6 +5,7 @@ It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for 
 
 - **V2 (current iteration):** [`docs/combat-system-v2.md`](docs/combat-system-v2.md) covers single-script architecture, animations and frame data, LoL attack speed, the tiered animation lock and what's next.
 - **Status effects (design):** [`docs/status-effect-system.md`](docs/status-effect-system.md) covers effect definitions, StatusController, the starting effect set, how stuns and Exhausted migrate onto it, networking, tests and the rollout order.
+- **State machine refactor (plan):** [`docs/state-machine-refactor.md`](docs/state-machine-refactor.md) moves combat actions, status effects and keybind/input logic onto event-driven statecharts.
 - **Plan:** [`docs/combat-system-plan.md`](docs/combat-system-plan.md). It covers the architecture, the review of the current code, the schema, a WeaponClass sketch, combat rules, packets, milestones, open questions and improvement ideas.
 
 ## Skills
@@ -73,6 +74,7 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 | | [`luau.performance.native-optimization`](skills/luau.performance.native-optimization.skill.md) | `--!native`, attributes, hot-path rules, Parallel Luau, profiling |
 | | [`luau.testing.unit-tests`](skills/luau.testing.unit-tests.skill.md) | what unit tests are, zero-dependency runner, TestEZ, Jest Lua, Lune, resolver matrix tests |
 | **roblox** (engine) | [`roblox.architecture.single-script-ssa`](skills/roblox.architecture.single-script-ssa.skill.md) | V2 single-script architecture: one Script / one LocalScript, Loader Init/Start lifecycle, Services vs Controllers vs shared modules, layout, wiring, pitfalls |
+| | [`roblox.architecture.state-machines`](skills/roblox.architecture.state-machines.skill.md) | states, events, guards, entry/exit, `after` timers, run-to-completion, HSM/parallel/history, RobloxStateMachine and Arch APIs and gotchas, combat/input patterns, a dependency-free statechart, tests |
 | | [`roblox.instance.hierarchy-services`](skills/roblox.instance.hierarchy-services.skill.md) | Instance API, attributes, tags, script containers/RunContext, require, services, Tool, project layout |
 | | [`roblox.scheduler.task-runservice-signals`](skills/roblox.scheduler.task-runservice-signals.skill.md) | task library, RunService frame order, RBXScriptSignal, deferred events, clocks, timing patterns |
 | | [`roblox.input.userinput-contextaction`](skills/roblox.input.userinput-contextaction.skill.md) | UserInputService, InputObject, input enums, ContextActionService, Input Action System, tap/hold, direction buffer |

@@ -258,6 +258,9 @@ EffectRemoved = Net.Define("S_EffectEnd", { "Instance", "U8" }),
 ```
 Clients keep a mirror for UI icons, movement lock and VFX. The server is the authority for damage/CC.
 
+## 7b. Effects vs the action state machine
+Effects overlap, so they are **not** action states. The action chart reads them through guards (`Can("Attack")`, `Has("Invulnerable")`). The controller raises chart events when the first lock-tier effect starts (`Disabled`) and when the last one ends (`Recovered`). See `roblox.architecture.state-machines` §6.4.
+
 ## 8. Mapping to this combat system
 
 | Event | Effect |

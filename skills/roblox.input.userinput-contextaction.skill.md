@@ -176,6 +176,9 @@ end
 ```
 With shift-lock / `Humanoid.AutoRotate`, camera and character face the same way, so keys == character directions. Decide per game; most directional-combat games lock the character to camera while in combat.
 
+### Input as a state machine
+The directional buffer, the queued M1 and F tap-vs-hold are client states with timeouts (`DirectionBuffered`, `AttackQueued`, `DefendHeld`). Keybinds are a table from KeyCode / UserInputType to an input event, so the chart never sees keys. See `roblox.architecture.state-machines` §6.5.
+
 ### Input -> intent -> network
 Client converts raw input into a small **intent** (`Action`, `Direction`, `Timestamp`) and fires a Net channel. Server validates against its own state. Never send key codes as authority.
 
