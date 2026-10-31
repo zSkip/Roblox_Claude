@@ -7,6 +7,13 @@
 		},
 		"ServerScriptService": {
 			"$path": "src/ServerScriptService"
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"$path": "src/StarterPlayerScripts"
+			}
 		}
 	}
 }

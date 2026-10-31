@@ -72,7 +72,11 @@ ReplicatedStorage
    └─ Weapons
       └─ LinkedSword         (definition module: schema + state wiring)
 
+StarterPlayer/StarterPlayerScripts/Combat   (CombatClient, Fx, Hud - the playable slice)
+
 ServerScriptService
+├─ Combat/CombatService     (authority: intents, claims, resolution, effects)
+├─ Combat/Dummies           (training NPCs: Bag, Blocker, Parrier, Dodger, Fighter)
 ├─ Core/SessionStore         (contract; ProfileStore adapter)
 ├─ Tests                     (*.spec modules + RunTests, Studio only)
 ├─ Data/PlayerData           (profile sessions, saved keybinds, stats)
@@ -472,7 +476,16 @@ Runtime values (exhaustion, posture, limb meters, effects, combo) are never save
 
 1. **M0 – Core.** `Core/Deps` with contracts and adapters (Packet, GoodSignal, ProfileStore; HitboxClass optional), TestKit + runner, Alive/Effects folders, `CombatTypes/Enums/Config`, `Net`, PlayerData with saved keybinds.
 2. **M1 – Pure logic + tests. ✅ Done.** `Directions`, `Exhaustion`, `Resolver`, `Attacks` (AttackDef registry matching), `Stats` (StatBlock math), each with specs. Details in §9 ("Pure logic modules").
-3. **M2 – WeaponClass.** Define/Instantiate/State/Runtime, schema validation, LinkedSword, Motor6D attach (R6), `Combatant` for players and NPCs.
+3. **M2 – WeaponClass. ✅ Done.** Define/Instantiate/State/Runtime, schema validation, LinkedSword, Motor6D attach (R6), `Combatant` for players and NPCs.
+
+**Playable slice (shipped with M2).** These first versions run end to end so the game can be played now. The milestones below still list what's missing from each.
+- M0: `Core` built-ins (Signal, Net, Hitbox, Maid, Deps), `CombatEnums`, `CombatConfig`, combat `Net` channels. *Missing:* adapters, PlayerData / saved keybinds, Alive/Effects folders.
+- M3: direction buffer, F block/parry split, intents, shift-lock yaw snap, placeholder animations (procedural swings). *Missing:* client prediction, input buffer during recovery, timeline locks (movement is limited by per-state walk speed instead).
+- M4: server state machine, intent rate limit, posture + regen, exhaustion stacks + Exhausted debuff through the StatBlock. *Missing:* position/state history.
+- M5: client hitbox → claims → hard checks (action id, active window ± slack, range) → Resolver → damage. NPC server-side hitboxes. *Missing:* rewind, victim corroboration, witness trust score.
+- M6: block, parry (wrong direction punished), dodge with i-frames, perfect counter-dodge → follow-up window (CounterSlash), guard break, diminishing hitstun. *Missing:* combo breaker.
+- M7: limb meters, red highlights, bursts, pluggable `BreakHandlers` (default does nothing extra), knockback. *Missing:* StatusController.
+- M8: white telegraph + parry-key label, result popups, posture/exhaustion HUD, training dummies. *Missing:* hitstop, SFX, feints, rebinding UI, mobile/gamepad.
 4. **M3 – Client input & prediction.** Direction buffer, F block/parry split, intents, M1 chain with placeholder animations, movement locks, shift-lock yaw snap.
 5. **M4 – Server authority.** Intent validation, state machine, posture, exhaustion stacks + debuff, position/state history.
 6. **M5 – Hits.** Client hitbox queries → claims → hard checks + rewind → Resolver → damage. Victim corroboration, then the witness trust score. NPC server-side hitboxes.

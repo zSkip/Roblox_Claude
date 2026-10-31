@@ -11,10 +11,38 @@ Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, clien
 
 **No skill hard-requires a third-party module.** Game and engine skills code against `core.contracts.interfaces`, which ships built-in implementations. The `lib.*` / `project.*` skills document optional adapters (Packet, GoodSignal, ProfileStore, HitboxClass, Indexer).
 
+## Playtest
+
+1. In Studio, open a new **Baseplate** place and set **Game Settings → Avatar → Avatar Type = R6** (the system is built for R6).
+2. Get the code into the place:
+   - **With Rojo:** `rojo serve`, then connect from the Rojo Studio plugin. `default.project.json` maps `ReplicatedStorage`, `ServerScriptService` and `StarterPlayer/StarterPlayerScripts`.
+   - **By hand:** recreate the `src/` tree in Studio. A folder becomes a Folder, `X.luau` becomes a ModuleScript `X`, `X.server.luau` becomes a Script `X`, and `X.client.luau` becomes a LocalScript `X`. `src/StarterPlayerScripts/Combat` goes in `StarterPlayer > StarterPlayerScripts`.
+3. Press **Play**. Unit tests print to Output (`[TestKit] N passed, 0 failed`), you spawn holding a sword, and five training dummies appear:
+
+| Dummy | Does | Try |
+|---|---|---|
+| Bag (grey) | nothing | combo M1 ×4 (knockback), directional hits fill red limb meters until they burst |
+| Blocker (blue) | holds an omni block | chip + posture damage until **GUARD BREAK**; hit it from behind |
+| Parrier (gold) | reads your swing and parries, right ~70% of the time | **PARRIED** staggers you; a wrong-direction parry gets punished |
+| Dodger (cyan) | counter-dodges your swing | **PERFECT DODGE**, then it answers with its CounterSlash follow-up |
+| Fighter (red) | walks up and attacks you | watch the white telegraph + label, then F (block), tap direction + F (parry) or Q (dodge) |
+
+Controls: **M1** combo · **tap W/A/S/D then M1** directional attack (S = knockback) · **hold F** block · **tap direction then F** parry · **Q** dodge (tap a direction first, default back). The label over an attacker names the key that parries it under the current `ParryRule`. Built around shift-lock: without it, your character turns to the camera when you act.
+
+The animations are placeholders (`rbxassetid://0`), so the sword swings procedurally and every state shows a coloured highlight. Put real ids into the `LinkedSword` schema later; no logic changes.
+
 ## Code
 
 | Path | What |
 |---|---|
+| `src/ReplicatedStorage/Core/` | contracts with built-in implementations: `Signal`, `Net` (one batched RemoteEvent + type checks), `Hitbox`, `Maid`, `Deps` (the one place to swap in adapters) |
+| `src/ReplicatedStorage/Combat/WeaponClass.luau` (+ spec) | the dual-context weapon constructor: `Define` (validate + freeze + attack registry), builder sugar, per-owner `Runtime` state machine, combo, cooldowns |
+| `src/ReplicatedStorage/Combat/Weapons/LinkedSword.luau` | first weapon schema (combo, directionals, CounterSlash follow-up, defense, limbs) |
+| `src/ReplicatedStorage/Combat/Combatant.luau` (+ spec) | per-character combat state shared by players and NPCs: posture, exhaustion debuff, limb meters, resolver snapshot, walk speed |
+| `src/ReplicatedStorage/Combat/WeaponModel.luau` / `Movement.luau` / `Limbs.luau` | Motor6D weapon attach (procedural sword), dash/knockback bursts, limb group registry |
+| `src/ReplicatedStorage/Combat/CombatConfig.luau` / `CombatEnums.luau` / `Net.luau` | global tuning, network ids, combat channels |
+| `src/ServerScriptService/Combat/` | `CombatServer` (entry), `CombatService` (intents, claims, resolution, effects), `Dummies` (training NPCs) |
+| `src/StarterPlayerScripts/Combat/` | `CombatClient` (input → intents, local hitbox → claims), `Fx` (telegraphs, swings, popups, limb highlights), `Hud` |
 | `src/ReplicatedStorage/TestKit.luau` | zero-dependency unit test kit (`Describe` / `It` / `Expect`) |
 | `src/ServerScriptService/Tests/RunTests.server.luau` | runs every `*.spec` module when you press Play in Studio |
 | `src/ReplicatedStorage/Combat/Directions.luau` (+ spec) | direction mirror/opposite, incoming side, configurable parry / counter-dodge matcher |
@@ -22,7 +50,7 @@ Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, clien
 | `src/ReplicatedStorage/Combat/Resolver.luau` (+ spec) | attack vs defense → Outcome (full plan §7 matrix) and per-outcome consequences |
 | `src/ReplicatedStorage/Combat/Attacks.luau` (+ spec) | AttackDef registry: register, priority matching, build from a weapon schema |
 | `src/ReplicatedStorage/Combat/Stats.luau` (+ spec) | LoL stat formulas and the StatBlock modifier container |
-| `default.project.json` | Rojo mapping (optional; or recreate the scripts by hand in Studio) |
+| `default.project.json` | Rojo mapping (optional, see Playtest) |
 
 Every file follows the `domain.subject.focus.skill.md` naming scheme and stays under 60 KB.
 Each file starts with YAML front-matter (`name`, `description`) so an agent can pick the right one.

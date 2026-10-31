@@ -39,6 +39,11 @@ local function MarkCombat(State : State, Config : Config, Now : number)
 	State.LastDecay = State.InCombatUntil
 end
 
+-- keeps the owner in combat without adding stacks (e.g. taking a hit)
+function Exhaustion.Touch(State : State, Config : Config, Now : number)
+	MarkCombat(State, Config, Now)
+end
+
 function Exhaustion.Add(State : State, Config : Config, Amount : number, Now : number)
 	MarkCombat(State, Config, Now)
 	State.Stacks = math.clamp(State.Stacks + Amount, 0, Config.MaxStacks)
