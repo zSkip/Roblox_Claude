@@ -110,6 +110,9 @@ Because the owning client simulates its character, setting WalkSpeed **on the cl
 
 ## 8. Rig parts
 
+**This project is R6 only.** Set Game Settings → Avatar → Avatar Type = R6 (or `StarterPlayer` character avatar settings) and write all limb/offset code against the R6 part names below.
+
+
 R15: `Head, UpperTorso, LowerTorso, LeftUpperArm, LeftLowerArm, LeftHand, RightUpperArm, RightLowerArm, RightHand, LeftUpperLeg, LeftLowerLeg, LeftFoot, RightUpperLeg, RightLowerLeg, RightFoot, HumanoidRootPart`.
 R6: `Head, Torso, Left Arm, Right Arm, Left Leg, Right Leg, HumanoidRootPart`.
 Use `HumanoidRootPart` for position/facing (`root.CFrame.LookVector`). `character:GetPivot()` / `:PivotTo(cf)` move whole model.

@@ -105,7 +105,10 @@ local RunService = game:GetService("RunService")
 RunService:IsServer() ; RunService:IsClient() ; RunService:IsStudio() ; RunService:IsRunning()
 ```
 
-## 6. Tool (if weapons are Tools)
+## 6. Tool (NOT used in this project)
+
+> Project rule: weapons are **not** `Tool` instances. They are Models attached with a `Motor6D` (section 7), and input is handled by the combat client. The Tool API is listed only for reference.
+
 
 Properties: `RequiresHandle`, `CanBeDropped`, `ManualActivationOnly`, `Enabled`, `Grip`, `ToolTip`, `TextureId`.
 Events: `Equipped(mouse)`, `Unequipped()`, `Activated()`, `Deactivated()`.
@@ -116,15 +119,16 @@ Tools give free backpack UI but couple input to click; many fighting games inste
 
 ```luau
 local handle = weaponModel.PrimaryPart
-local grip = Instance.new("Motor6D")        -- animatable
-grip.Name = "WeaponGrip"
-grip.Part0 = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
-grip.Part1 = handle
-grip.C0 = CFrame.new(0, -1, 0)
-grip.Parent = grip.Part0
+-- R6: weapon motor on "Right Arm" (server-side so it replicates; same Name as in the animation rig)
+local motor = Instance.new("Motor6D")       -- animatable joint (not a Tool grip)
+motor.Name = "Handle"                       -- must match the joint name used when animating
+motor.Part0 = character:WaitForChild("Right Arm")
+motor.Part1 = handle
+motor.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(-math.pi / 2, 0, 0)   -- base offset at the hand; animations drive Transform on top
+motor.Parent = motor.Part0
 weaponModel.Parent = character
 ```
-Mark weapon parts `CanCollide=false`, `Massless=true`, `CanQuery` as needed (false if hitboxes shouldn't detect it).
+Mark weapon parts `CanCollide=false`, `Massless=true`, `CanQuery=false` (hitboxes must not detect the weapon), unanchored. To animate the weapon, add the same `Motor6D` (same name, Part0 `Right Arm`, Part1 the handle) to the rig in the Animation Editor; keyframes on that joint then drive the weapon in game.
 
 ## 8. Suggested project layout
 

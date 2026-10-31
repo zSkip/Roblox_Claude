@@ -50,28 +50,37 @@ Reference skills for every API used here are in [`/skills`](../skills) (see [REA
 ```
 ReplicatedStorage
 ├─ Packages
-│  ├─ Packet                 (Suphi)       - shared networking
-│  └─ GoodSignal             (stravant)    - shared events
+│  ├─ Packet                 (Suphi, v1.7.x)  - shared networking (all combat traffic)
+│  ├─ GoodSignal             (stravant)       - shared events
+│  ├─ HitboxClass            (RedTrioVirus v1.2.0, + sleitnick Signal) - client-side hit queries
+│  └─ IndexerV2              (yours)          - identifier-routed networking (non-combat / or rebuilt on Packet)
 └─ Combat
    ├─ WeaponClass            ← G1: the single dual-context constructor module
    │   ├─ Definition         (blueprint: schema + states, frozen)
    │   ├─ Runtime            (per owner: state machine, combo, timers, signals)
    │   └─ State              (Entered/Exited signals, Bind sugar)
-   ├─ CombatTypes            (export types: schema, enums-as-types)
-   ├─ CombatEnums            (frozen id tables: Action, Direction, Outcome, DamageType)
-   ├─ CombatConfig           (global tuning: windows, stamina costs)
-   ├─ Resolver               (pure: attack vs defense → Outcome; identical on both sides)
+   ├─ CombatTypes / CombatEnums / CombatConfig   (ParryRule lives in Config)
+   ├─ Resolver               (pure: attack vs defense → Outcome; unit-tested)
+   ├─ Stats                  (StatBlock: LoL-style stats + modifiers)
+   ├─ StatusEffects          (effect definitions + StatusController)
+   ├─ Limbs                  (direction → limb mapping, meter math)
    ├─ Net                    (Packet definitions, shared)
    └─ Weapons
       └─ LinkedSword         (definition module: schema + state wiring)
 
 ServerScriptService
 ├─ Packages/ProfileStore
-├─ Data/PlayerData           (ProfileStore sessions, keybind settings, stats)
-└─ Combat/CombatServer       (entry: validates intents, owns state/stamina, hitboxes, damage, broadcasts)
+├─ Data/PlayerData           (ProfileStore sessions, saved keybinds, stats)
+└─ Combat/CombatServer       (entry: intents, authoritative state/stamina/posture, claim validation,
+                              position + state history, damage, effects, broadcasts)
 
 StarterPlayer/StarterPlayerScripts
-└─ Combat/CombatClient       (entry: input → intents, prediction, animations, VFX/UI, local knockback)
+└─ Combat/CombatClient       (entry: input → intents, prediction, animations + movement locks,
+                              HitboxClass hitboxes → claims, victim/witness answers, highlights, VFX/UI)
+
+Workspace
+├─ Alive                     (all player characters + NPCs; required by HitboxClass)
+└─ Effects                   (VFX / projectile folder)
 ```
 
 ### How "dual context with no IsServer" works
@@ -98,6 +107,10 @@ local LinkedSword = WeaponClass.Define({
 		AttackSpeed = 1 ;
 		WalkSpeedMultiplier = 0.85 ;
 		MaxStamina = 100 ;
+		MaxPosture = 100 ;          -- block meter; full posture damage = GuardBroken
+		PostureRegen = 15 ;         -- per second after PostureRegenDelay
+		PostureRegenDelay = 1.5 ;
+		Armor = 0 ; MagicResist = 0 ; Tenacity = 0 ;   -- LoL-style stats (see status effects)
 	} ;
 
 	Damage = { Type = "Physical" ; Amount = 8 } ;          -- default for every attack unless overridden
@@ -125,10 +138,10 @@ local LinkedSword = WeaponClass.Define({
 	Combo = {
 		ResetTime = 1.1 ;
 		Attacks = {
-			{ Animation = "M1.1" ; Startup = 0.18 ; Active = 0.10 ; Recovery = 0.22 ; StaminaCost = 4 ; Hitstun = 0.35 ; Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
-			{ Animation = "M1.2" ; Startup = 0.18 ; Active = 0.10 ; Recovery = 0.22 ; StaminaCost = 4 ; Hitstun = 0.35 ; Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
-			{ Animation = "M1.3" ; Startup = 0.18 ; Active = 0.10 ; Recovery = 0.22 ; StaminaCost = 4 ; Hitstun = 0.35 ; Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
-			{ Animation = "M1.4" ; Startup = 0.25 ; Active = 0.12 ; Recovery = 0.55 ; StaminaCost = 8 ; Hitstun = 0.6 ;
+			{ Animation = "M1.1" ; Startup = 0.18 ; Active = 0.10 ; Recovery = 0.22 ; StaminaCost = 4 ; Hitstun = 0.35 ; PostureDamage = 10 ; Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
+			{ Animation = "M1.2" ; Startup = 0.18 ; Active = 0.10 ; Recovery = 0.22 ; StaminaCost = 4 ; Hitstun = 0.35 ; PostureDamage = 10 ; Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
+			{ Animation = "M1.3" ; Startup = 0.18 ; Active = 0.10 ; Recovery = 0.22 ; StaminaCost = 4 ; Hitstun = 0.35 ; PostureDamage = 10 ; Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
+			{ Animation = "M1.4" ; Startup = 0.25 ; Active = 0.12 ; Recovery = 0.55 ; StaminaCost = 8 ; Hitstun = 0.6 ; PostureDamage = 35 ;   -- knockback: blockable, just heavy on posture
 			  Damage = { Type = "Physical" ; Amount = 12 } ;
 			  Knockback = { Speed = 55 ; Up = 18 ; Duration = 0.2 } ; Tags = { Finisher = true } ;
 			  Hitbox = { Size = Vector3.new(6, 5, 7) ; Offset = CFrame.new(0, 0, -4) } } ;
@@ -139,7 +152,7 @@ local LinkedSword = WeaponClass.Define({
 		Front = { Animation = "Directional.Front" ; Startup = 0.38 ; Active = 0.12 ; Recovery = 0.35 ; StaminaCost = 12 ; Hitstun = 0.5 ; PostureDamage = 20 ; Hitbox = { Size = Vector3.new(4, 5, 8) ; Offset = CFrame.new(0, 0, -4.5) } } ;
 		Left  = { Animation = "Directional.Left"  ; Startup = 0.38 ; Active = 0.12 ; Recovery = 0.35 ; StaminaCost = 12 ; Hitstun = 0.5 ; PostureDamage = 20 ; Hitbox = { Size = Vector3.new(7, 5, 5) ; Offset = CFrame.new(0, 0, -3) } } ;
 		Right = { Animation = "Directional.Right" ; Startup = 0.38 ; Active = 0.12 ; Recovery = 0.35 ; StaminaCost = 12 ; Hitstun = 0.5 ; PostureDamage = 20 ; Hitbox = { Size = Vector3.new(7, 5, 5) ; Offset = CFrame.new(0, 0, -3) } } ;
-		Back  = { Animation = "Directional.Back"  ; Startup = 0.42 ; Active = 0.12 ; Recovery = 0.5  ; StaminaCost = 14 ; Hitstun = 0.6 ; PostureDamage = 25 ;
+		Back  = { Animation = "Directional.Back"  ; Startup = 0.42 ; Active = 0.12 ; Recovery = 0.5  ; StaminaCost = 14 ; Hitstun = 0.6 ; PostureDamage = 40 ;
 		          Knockback = { Speed = 60 ; Up = 20 ; Duration = 0.2 } ;                      -- S+M1 always knockback
 		          Hitbox = { Size = Vector3.new(5, 5, 6) ; Offset = CFrame.new(0, 0, -3.5) } } ;
 	} ;
@@ -152,6 +165,18 @@ local LinkedSword = WeaponClass.Define({
 	} ;
 
 	Timings = { DirectionalWindow = 0.25 ; InputBuffer = 0.2 } ;
+
+	LimbTargets = { Right = "Left Arm" ; Left = "Right Arm" ; Front = "Torso" ; Back = "Legs" } ;   -- mirrored, R6
+	Limbs = {
+		["Left Arm"]  = { Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Effect = "ArmBroken" } ;
+		["Right Arm"] = { Max = 100 ; PerHit = 25 ; Chip = 3 ; BurstDamage = 15 ; Effect = "Disarmed" } ;
+		Torso         = { Max = 120 ; PerHit = 25 ; Chip = 4 ; BurstDamage = 20 ; Effect = "Bleeding" } ;
+		Legs          = { Max = 100 ; PerHit = 30 ; Chip = 3 ; BurstDamage = 12 ; Effect = "Hobbled" } ;
+	} ;
+
+	Feint = { Enabled = true ; StaminaCost = 10 ; Window = 0.2 } ;   -- per weapon class
+
+	-- Every attack spec may also carry Locks = { { From, To, Move, Rotate, Jump } } (animation-timeline locks).
 
 } :: WeaponClass.WeaponSchema) ;
 
@@ -289,143 +314,159 @@ for _, Def in WeaponClass.Definitions do
 end ;
 ```
 
-**Server entry** (excerpt) hooks hit windows:
+**Server entry** (excerpt) opens the window in which hit claims are accepted:
 ```luau
 Def.Instantiated:Connect(function(Rt)
 	Rt.StateChanged:Connect(function(New, _, Ctx)
-		if New == "Attacking" then ScheduleHitWindow(Rt, Ctx.Attack, Rt.ActionId) end ;
+		if New == "Attacking" then OpenClaimWindow(Rt, Ctx.Attack, Rt.ActionId) end ;   -- ActiveStart/ActiveEnd from schema timings
 	end) ;
 end) ;
 ```
+The **client entry** starts the local HitboxClass hitbox for the same window and sends claims (see §10).
 
 ---
 
-## 6. Combat rules (v1 defaults; to confirm with you)
+## 6. Decisions log (revision 2)
+
+| Topic | Decision |
+|---|---|
+| Parry key | **Configurable**: `CombatConfig.ParryRule = "Mirrored"` (defender presses the side the attack comes from: attacker D → defender A) or `"Same"` (defender presses the attacker's key). Default `"Mirrored"`. |
+| Knockback vs block | Knockback attacks are **blocked** like others. They don't guard-break by tag; they carry higher `PostureDamage`, so they break guard only when posture runs out. |
+| Posture | New stat: `MaxPosture`, `PostureRegen`, `PostureRegenDelay`, and `PostureDamage` on every attack spec. |
+| Hit detection | **Client-side** (HitboxClass running locally on the attacker) with **multi-client validation** (server hard checks + rewind, victim corroboration for borderline claims, witness sampling for a trust score). See `game.combat.hit-validation-multiclient`. |
+| Rig | **R6 always.** |
+| Animations | Placeholder ids (`rbxassetid://0`) + schema timings. Swapping in real animations doesn't change any logic. |
+| Weapon model | Model attached with a **Motor6D** (`Handle` joint on `Right Arm`), not a Tool grip. No `Tool` class anywhere. |
+| Packet | v1.7.x (the newest source I could read; Wally mirrors go up to 1.7.3). |
+| Indexer | Your network module. Documented in `project.indexer.networking`, including bugs to fix and a version that runs your API on top of Packet. |
+| Incoming-attack telegraph | **White Highlight** on the attacker's body during startup (client-side). |
+| Feints | Yes, configured **per weapon class** (`Feint = {Enabled, StaminaCost, Window}`). |
+| Lag compensation | Yes: server position/state history, rewind bounded to 250 ms. |
+| Combo breaker | Maybe. Explained in §9 below. |
+| Rebinds | Saved in ProfileStore (`Keybinds` as Enum names). |
+
+## 7. Combat rules (current)
 
 ### Input (client)
-- **Direction buffer:** keeps the latest W/A/S/D press and its `os.clock()` time. The next action key consumes it if it's within `DirectionalWindow` (0.25s). No per-frame cleanup loop.
-- **M1:** with a buffered direction it's a **Directional attack**. Without one, it's the **next combo M1**.
-- **F press:** opens a **parry window** (`ParryWindow` 0.2s), directional if a direction is buffered. **Keep holding F** past the window and you're **blocking** (omni). Release stops the block. Parry happens on press, so it has no input delay.
-- **Q:** **Dodge** in the buffered direction (default Back). The dodge has i-frames.
-- **Input buffer:** an action pressed during Recovery runs as soon as Recovery ends, if pressed within 0.2s of the end.
+- **Direction buffer:** keeps the latest W/A/S/D press and its time. The next M1/F/Q press consumes it if within `DirectionalWindow` (0.25 s).
+- **M1:** with a buffered direction → **directional M1** (targets a limb). Without one → **next combo M1** (1-2-3-4; #4 knocks back).
+- **S + M1:** directional Back; always knockback; targets the legs.
+- **F press:** opens a parry window (directional if buffered). **Holding F** past the window = omni block. Release ends the block.
+- **Q:** dodge in the buffered direction (default Back), with i-frames. A dodge in the counter direction inside the perfect window = perfect dodge.
 
-### Resolution (server, `Resolver` module, pure and unit-testable)
-| Defender state | vs normal M1 | vs directional | vs knockback (M1 #4 / S+M1) |
+### Resolution matrix (pure `Resolver`, judged at the claim's time)
+| Defender state | vs combo M1 | vs directional M1 | vs knockback (M1 #4 / S+M1) |
 |---|---|---|---|
-| Idle / moving | Hit | Hit | Hit + knockback |
-| Blocking (facing) | Blocked (chip, stamina/posture loss) | Blocked (heavier posture loss) | **Question for you:** guard break, or blocked? |
-| Blocking (hit from behind) | Hit | Hit | Hit + knockback |
-| Parry, matching direction | Parried | Parried | Parried |
-| Parry, wrong direction | Hit | Hit (punished) | Hit + knockback |
-| Parry, no direction (F with no WASD) | **Question:** omni parry for M1 only? | — | — |
+| Idle / moving | Hit | Hit + limb meter | Hit + knockback (+ limb meter if directional) |
+| Blocking, facing | Blocked (posture) | Blocked (more posture) | **Blocked (high posture)**; posture empty → GuardBreak |
+| Blocking, hit from behind | Hit | Hit + limb | Hit + knockback |
+| Parry, direction matches `ParryRule` | Parried | Parried | Parried |
+| Parry, wrong direction | Hit | Hit + limb (punished) | Hit + knockback |
 | Dodge i-frames | Dodged | Dodged | Dodged |
-| Dodge in counter direction, in perfect window | Perfect dodge (bonus) | Perfect dodge | Perfect dodge |
+| Counter-direction dodge in perfect window | PerfectDodge | PerfectDodge | PerfectDodge |
 
-**Direction convention.** The attacker's *Right* swing lands on the defender's *Left* side when they face each other. The defender's parry key is "the side the attack comes from, in the defender's own view". So the defender parries an attacker's `D` with `A`. Counter-direction dodge = dodge *away* from the incoming side (incoming Left → dodge Right). Both checks use the same `MatchesDirection(rule, incoming, chosen)` function. That's the "tie script-wise".
+Parry and counter-dodge share one function, `MatchesDirection(rule, attackDir, incomingSide, chosenDir)` (the "tie script-wise").
 
-### Exhaustion
-One meter for v1: **Stamina**, 0–100, server-owned.
-- Costs: M1 4, directional 12–14, parry attempt 6, dodge 15. A successful block costs `PostureDamage × 0.5`.
-- Rewards: successful parry +10, perfect dodge +15.
-- Regen: 20/s after 0.8s with no spending.
-- At 0 → **Exhausted** for 1.5s: no dodge or parry, block breaks on the next hit, walk speed ×0.7.
-This lets players mix directional and normal play while making spam self-limiting.
+### Meters
+- **Stamina** (exhaustion): action costs, regen after a delay; at 0 → `Exhausted` status (slow, no dodge/parry).
+- **Posture** (guard): filled by blocked hits (`PostureDamage`), regenerates after `PostureRegenDelay`; full → `GuardBroken` (long stun).
+- **Limb meters**: filled by directional hits (see §8).
 
-### Knockback
-- M1 #4 and S+M1 carry a `Knockback` spec.
-- The server sends `Net.Knockback` to the victim's client, which applies a `LinearVelocity` locally because it owns its character's physics.
-- NPCs are server-owned (`SetNetworkOwner(nil)`), so the server applies it directly.
+## 8. Directional limb system (how I interpret your idea)
 
----
+1. A directional M1 picks a **target limb** on the defender from the direction (schema `LimbTargets`, mirrored because the fighters face each other):
+   D+M1 → defender's **Left Arm**, A+M1 → **Right Arm**, W+M1 → **Torso**, S+M1 → **Legs** (+ knockback).
+2. A landed hit does **small chip damage** and adds `PerHit` to that limb's meter.
+3. That limb gets a **red Highlight** whose fill goes from transparent to **solid** as the meter rises.
+4. At full: **burst**. Extra damage plus a **limb-break status effect**: arm → Disarmed / weaker block, legs → Slow + Grounded (no dodge), torso → Bleed + reduced healing (head optional → Blind). Then the meter resets, or the limb stays "lost" while the effect lasts.
+5. Blocked hits fill **posture**, not the limb meter. Parried or dodged hits fill nothing.
+6. Highlights are client-side with a budget (Roblox renders ~31 at once), with an overlay-part fallback. See `game.combat.limb-damage-highlight`.
 
-## 7. Networking (Packet)
+## 9. Features added in this revision
+
+### Status effects (League of Legends model)
+- Stats: AD/AP-style scaling, Armor/MR (`100/(100+resist)`), penetration order, Tenacity (multiplicative, doesn't affect Airborne), strongest-slow-only, ability haste, life steal, heal/shield power, Grievous Wounds.
+- Modifiers: Flat / PercentAdd / PercentMult in a `StatBlock`.
+- CC taxonomy: Stun, Root, Slow, Cripple, Silence, Disarm, Grounded, Blind, Nearsight, Airborne, Suppression, Charm/Taunt/Fear, Sleep, Polymorph, Stasis. Each one says what it blocks: move, rotate, attack, defend, dodge.
+- Stack modes: Refresh / Extend / Independent / Intensity / Ignore.
+- Server-authoritative `StatusController` with `Can("Move")`-style gates, replicated as compact Packet events.
+- **Your Trello card couldn't be opened from my environment.** Paste its contents and I'll align names and values. See `game.status-effects.lol-stats-cc`.
+
+### Animation-timeline movement locks
+- Each attack spec has `Locks = { {From, To, Move, Rotate, Jump} }` in seconds, scaled by attack speed. They can be replaced by `KeyframeMarker`s later.
+- Locks are applied as self-inflicted status effects, so stuns and locks share one movement gate.
+- Client enforcement: PlayerModule `Controls:Disable()` for movement, `AutoRotate = false` plus a rigid `AlignOrientation` for rotation (shift-lock safe), and jumping disabled.
+- The server checks displacement during locked windows (anti-slide) and feeds the trust score. See `game.combat.animation-movement-lock`.
+
+### Feints (per weapon class)
+During a directional attack's startup, cancel into another direction or into idle for stamina, inside `Feint.Window`, once per attack.
+
+### Combo breaker (explanation)
+An escape usable **during hitstun**: it costs a large chunk of stamina (or a full meter), pushes attackers back and gives brief i-frames. It stops infinite M1 chains, especially 2v1. Lighter alternatives: hitstun that shrinks with each consecutive hit, or a forced knockback after N hits. My recommendation is diminishing hitstun in v1, with a breaker later if needed.
+
+### Unit tests (explanation)
+A unit test is a tiny script that calls one function with fixed inputs and checks the answer. For example: "an idle defender hit by a knockback M1 returns Hit + knockback", or "a block against a knockback returns Blocked, not GuardBreak, when posture is 100". The resolver, stat math, combo index and direction→limb mapping are pure functions, so a table of cases can run in Studio in milliseconds whenever balance changes. If a change breaks parry logic, a test fails before players notice. See `luau.testing.unit-tests` (zero-dependency runner, TestEZ, Jest Lua, Lune).
+
+## 10. Networking (Packet)
 
 ```luau
 -- ReplicatedStorage/Combat/Net
 local Packet = require(game.ReplicatedStorage.Packages.Packet) ;
-return {
+local Net = {
 	-- client → server
-	Intent    = Packet("C_Intent", Packet.NumberU8, Packet.NumberU8, Packet.NumberF64) ;   -- Action, Direction, ClientServerTime
+	Intent    = Packet("C_Intent", Packet.NumberU8, Packet.NumberU8, Packet.NumberF64) ;                       -- Action, Direction, ClientServerTime
+	HitClaim  = Packet("C_HitClaim", Packet.NumberU16, Packet.Instance, Packet.NumberF64, Packet.CFrameF32U16) ; -- ActionId, Target, Time, AttackerCF
 	-- server → all
-	Action    = Packet("S_Action", Packet.Instance, Packet.NumberU8, Packet.NumberU8, Packet.NumberU8) ; -- Actor, Action, Direction, ComboIndex
-	Result    = Packet("S_Result", Packet.Instance, Packet.Instance, Packet.NumberU8, Packet.NumberU16) ; -- Attacker, Defender, Outcome, Damage
+	Action    = Packet("S_Action", Packet.Instance, Packet.NumberU8, Packet.NumberU8, Packet.NumberU8) ;       -- Actor, Action, Direction, ComboIndex (→ white telegraph)
+	Result    = Packet("S_Result", Packet.Instance, Packet.Instance, Packet.NumberU8, Packet.NumberU16) ;       -- Attacker, Defender, Outcome, Damage
+	Limb      = Packet("S_Limb", Packet.Instance, Packet.NumberU8, Packet.NumberU8) ;                           -- Target, LimbId, Fill(0-255)
+	LimbBurst = Packet("S_LimbBurst", Packet.Instance, Packet.NumberU8) ;
+	Effect    = Packet("S_Effect", Packet.Instance, Packet.NumberU8, Packet.NumberU8, Packet.NumberF64) ;       -- Target, EffectId, Stacks, EndsAt
+	EffectEnd = Packet("S_EffectEnd", Packet.Instance, Packet.NumberU8) ;
 	-- server → one
-	Stamina   = Packet("S_Stamina", Packet.NumberU8) ;
-	Knockback = Packet("S_Knockback", Packet.Vector3F24, Packet.NumberF16, Packet.NumberF64) ;  -- Velocity, Duration, ServerTime
-	Cancel    = Packet("S_Cancel", Packet.NumberU8) ;                                         -- reason
+	Meters    = Packet("S_Meters", Packet.NumberU8, Packet.NumberU8) ;                                         -- Stamina%, Posture%
+	Knockback = Packet("S_Knockback", Packet.Vector3F24, Packet.NumberF16, Packet.NumberF64) ;                  -- Velocity, Duration, ServerTime
+	Cancel    = Packet("S_Cancel", Packet.NumberU8) ;
+	-- server → one, with response (multi-client validation)
+	HitCheck  = Packet("S_HitCheck", Packet.Instance, Packet.NumberF64, Packet.NumberU8):Response(Packet.NumberU8) ;
+	Witness   = Packet("S_Witness", Packet.Instance, Packet.Instance, Packet.NumberF64):Response(Packet.NumberF16) ;
 } ;
+Net.HitCheck.ResponseTimeout = 0.15 ; Net.HitCheck.ResponseTimeoutValue = 0 ;
+Net.Witness.ResponseTimeout = 0.5 ;
+return Net ;
 ```
-- Every incoming `Intent` is validated: ranges, alive, state transition allowed, cooldown, stamina, rate limit.
-- **Damage is never sent by the client.**
-- `S_Action` broadcasts at attack **startup**, so every client can flash the incoming-direction indicator. That indicator is what makes the system reaction-based.
+- The client never sends damage, direction for a claim, or outcome. The server takes those from the validated intent and the schema.
+- Your Indexer can keep non-combat traffic, or wrap these Packets (`project.indexer.networking` §5).
 
----
+## 11. Data (ProfileStore)
 
-## 8. Data (ProfileStore)
+Template: `Equipped.Weapon`, `OwnedWeapons`, **`Keybinds`** (Enum names, e.g. `{Defend = "F", Dodge = "Q", Attack = "MouseButton1", Front = "W", ...}`), `Settings` (including the player's parry-rule preference if you later allow per-player choice), `Combat` stats.
+Runtime values (stamina, posture, limb meters, effects, combo) are never saved. Optional combat-log penalty via `Profile.OnLastSave`.
 
-Template: `Equipped.Weapon`, `OwnedWeapons`, `Keybinds` (Enum names), `Settings`, `Combat` stats.
-- Runtime combat values (stamina, combo, cooldowns) are never saved.
-- Optional combat-log penalty uses `Profile.OnLastSave` (reason ≠ "Shutdown" and in combat).
+## 12. Build order (milestones)
 
----
+1. **M0 – Setup.** Folders, packages (Packet, GoodSignal, HitboxClass + Signal, ProfileStore), Alive/Effects folders, `CombatTypes/Enums/Config`, `Net`, PlayerData with saved keybinds.
+2. **M1 – Core.** `WeaponClass` (Define/Instantiate/State/Runtime), schema validation, LinkedSword definition, Motor6D weapon attach (R6).
+3. **M2 – Client input & prediction.** Direction buffer, intents, M1 chain with placeholder animations, movement locks.
+4. **M3 – Server authority.** Intent validation, state machine, stamina/posture, position + state history.
+5. **M4 – Hits.** HitboxClass client hitboxes → claims → hard checks + rewind → Resolver → damage. Victim corroboration, then the witness trust score.
+6. **M5 – Defense.** Block / parry (ParryRule) / dodge with the counter bonus, guard break. Resolver unit tests.
+7. **M6 – Limbs & status effects.** StatBlock, StatusController, limb meters + highlights + bursts, knockback.
+8. **M7 – Feedback.** White telegraph, hitstop, VFX/SFX, meters UI, damage numbers.
+9. **M8 – Polish.** Feints, input buffer, (combo breaker / diminishing hitstun), rebinding UI, mobile/gamepad.
 
-## 9. Build order (milestones)
+## 13. Still open (smaller questions)
 
-1. **M0 – Setup.** Folder layout, packages (Packet, GoodSignal, ProfileStore), `CombatTypes`, `CombatEnums`, `Net`, PlayerData loader.
-2. **M1 – Core module.** `WeaponClass` (Define / Instantiate / State / Runtime) plus schema validation, then the LinkedSword definition.
-3. **M2 – Client input & prediction.** Direction buffer, intents, M1 chain with animations on a dummy, respawn-safe track cache.
-4. **M3 – Server authority.** Intent validation, state machine, stamina, schedule-based hitboxes (debug draw), damage, `S_Result`.
-5. **M4 – Defense.** Block (hold F), parry (press F, directional), dodge (Q with i-frames, counter bonus), Resolver unit tests.
-6. **M5 – Knockback & finishers.** M1 #4, S+M1, victim-side LinearVelocity, NPC path.
-7. **M6 – Feedback.** Incoming-direction indicator, hitstop, VFX/SFX, stamina bar, damage numbers.
-8. **M7 – Polish.** Input buffer, cancel windows, lag leniency/rewind, rebinding UI, mobile/gamepad.
+1. **Directional trigger:** only a tap inside the window, or also "W held while clicking"?
+2. **F with no direction:** omni parry, instant block, or nothing until held?
+3. **Directional M1s and the chain:** reset the 1-2-3-4 chain, continue it, or stay separate?
+4. **Counter-dodge bonus:** longer i-frames, stamina refund, free counter window, or a mix?
+5. **Limb mapping:** is W → Torso and S → Legs right? Should the Head be a target? Do combo (non-directional) M1s add limb damage?
+6. **Limb loss:** reset after the burst, stay broken until death, or recover after the effect? Literal dismemberment visuals or effect-only?
+7. **Camera:** shift-lock forced in combat (decides whether WASD is camera- or character-relative)?
+8. **Scope:** PvP/PvE, players per server, mobile/gamepad in v1?
+9. **Trello card:** paste the "League of Legends stats" contents (it couldn't be opened from here).
 
----
-
-## 10. What I need from you
-
-### Information (decisions)
-1. **Direction convention.** Should a defender parry an attacker's `D` swing with `A` (the side it comes from, as I propose) or with `D` (the same key)?
-2. **Directional attack trigger.** Only a *tap* within the window, or also "W held while clicking"?
-3. **F with no direction.** Should it be an omni parry, an instant block, or nothing until held?
-4. **Knockback vs block.** Does a knockback attack guard-break a blocker, push them back, or just get blocked?
-5. **Directional attacks and the chain.** Should they reset the M1 chain, continue it, or stay separate?
-6. **Counter-dodge bonus.** What does the bonus give: longer i-frames, a stamina refund, a free counter window, or a slow-mo flash?
-7. **Exhaustion model.** One stamina meter (proposed), or stamina plus a separate posture/guard meter?
-8. **Hit detection authority.** Server hitboxes (proposed: secure, slightly less responsive at high ping), or client-detected hits with server validation (snappier)?
-9. **Weapon delivery.** A `Tool` in the Backpack, or a model welded to the character with our own equip key?
-10. **Camera.** Is shift-lock forced in combat? This decides whether WASD means "camera-relative" or "character-relative".
-11. **Scope.** PvP only or PvE too? Expected players per server? Mobile and gamepad support in v1?
-12. **Rig type.** R6 or R15? This affects the animations and hitbox offsets.
-
-### Material (assets)
-- Animation asset ids, **owned by the same user/group as the game**, for: idle, M1 ×4, directional ×4, parry ×4 (or 1), block hold, block impact, dodge ×4, hit-react ×4, stagger, guard break, knockback/launch, getting up.
-- Animation timing per attack: when the swing becomes dangerous and when it ends (or add `KeyframeMarker`s named `HitStart`/`HitEnd` so I can read them).
-- The weapon model(s) with a `Handle`/PrimaryPart and the grip offset.
-- VFX and SFX ids if you have them. Placeholders work otherwise.
-- The **Packet version** you use. I built the reference from v1.7.x source; tell me if yours is newer.
-- Your `IndexerV2` module, if it should stay in the design (its purpose isn't clear from the sample).
-
----
-
-## 11. What we could add to improve
-
-- **Incoming-attack direction indicator.** Arrows or edge glow on the defender's screen at the attacker's startup. A reaction-based system needs it, since you can't parry what you can't read.
-- **Feints.** Cancel a directional attack's startup into another direction for stamina. This adds mind games on top of reactions.
-- **Input buffer and cancel windows.** These are what make combos feel responsive and not sticky.
-- **Hitstop, camera shake, and Highlight flashes** per outcome (see `roblox.feedback.tween-vfx-sound-camera` §7).
-- **Clash rule.** When two attacks' active frames overlap, both get pushed back. This is cheap to add and very readable.
-- **Lag compensation.** Rewind defender positions by the attacker's ping (bounded to 200 ms) and judge parries with a bounded client timestamp.
-- **Combo-breaker or burst.** Costs stamina and escapes long hitstun chains. It stops infinite combos in group fights.
-- **Diminishing hitstun** for repeated hits on the same target.
-- **Schema validation and a debug overlay.** Hitbox drawing, state labels over heads, a resolver log.
-- **Resolver unit tests.** The resolver is a pure function, so a matrix test catches balance and logic regressions.
-- **Rebinding UI** saved in ProfileStore, plus mobile CAS buttons and gamepad mapping (right stick or D-pad for directions).
-- **Weapon variety through the schema alone,** for example a heavy weapon (slow startup, high posture damage) and a light weapon (fast chain, low damage).
-- **Analytics.** Parry rate and hit rate per weapon, for balancing.
-
----
-
-## 12. Skills index
+## 14. Skills index
 
 See [README](../README.md#skills). Each skill file is under 60 KB and grouped by a `domain.subject.focus` naming scheme.

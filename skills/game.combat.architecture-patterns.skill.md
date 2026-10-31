@@ -5,7 +5,9 @@ description: Combat system design patterns for Roblox fighting games - dual-cont
 
 # Combat — Architecture & Patterns
 
-Companion skills: lib.packet.networking, lib.goodsignal.events, roblox.input.userinput-contextaction, roblox.animation.animator-tracks, roblox.spatial.raycast-overlap-hitbox, roblox.physics.movers-knockback, roblox.network.remotes-replication-security.
+Project decisions: **R6 only**, weapons are Models on a `Motor6D` (no `Tool`), **client-side hit detection with multi-client validation** (game.combat.hit-validation-multiclient), knockback attacks are **blockable** (they deal higher posture damage), the parry direction rule is a **config value**.
+
+Companion skills: lib.hitboxclass.hitbox, game.combat.limb-damage-highlight, game.combat.animation-movement-lock, game.status-effects.lol-stats-cc, lib.packet.networking, lib.goodsignal.events, roblox.input.userinput-contextaction, roblox.animation.animator-tracks, roblox.spatial.raycast-overlap-hitbox, roblox.physics.movers-knockback, roblox.network.remotes-replication-security.
 
 ## 1. Dual-context modules (no IsServer/IsClient in shared code)
 
@@ -58,7 +60,8 @@ export type AttackSpec = {
 	Hitbox: HitboxSpec,
 	Knockback: { Speed: number, Up: number, Duration: number }?,
 	Hitstun: number,
-	Tags: { [string]: true }?,      -- "Finisher", "Unblockable", "GuardBreak"
+	Locks: { { From: number, To: number, Move: boolean?, Rotate: boolean?, Jump: boolean? } }?,  -- animation-timeline locks
+	Tags: { [string]: true }?,      -- "Finisher", "Unblockable"
 }
 
 export type WeaponSchema = {
@@ -70,6 +73,8 @@ export type WeaponSchema = {
 		Directions: { [Enum.KeyCode]: Direction } },
 	Combo: { Attacks: { AttackSpec }, ResetTime: number, FinisherIndex: number },
 	Directional: { [Direction]: AttackSpec },
+	LimbTargets: { [Direction]: string },   -- see game.combat.limb-damage-highlight
+	Feint: { Enabled: boolean, StaminaCost: number, Window: number }?,   -- per weapon class
 	Defense: { ParryWindow: number, ParryCooldown: number, BlockDamageMultiplier: number,
 		DodgeIFrames: number, DodgeCooldown: number, DodgeDistance: number, PerfectDodgeWindow: number },
 	Timings: { DirectionalWindow: number, InputBuffer: number },
@@ -139,11 +144,11 @@ local function Resolve(attack, atkDir, defender, now)
 		return "Dodged"
 	end
 	if s == "Parrying" and now - defender.ParryStart <= schema.ParryWindow then
-		if defender.ParryDir == nil or defender.ParryDir == incoming then return "Parried" end
+		if defender.ParryDir == nil or ParryMatches(Config.ParryRule, atkDir, incoming, defender.ParryDir) then return "Parried" end
 		return "Hit"                          -- wrong-direction parry = punished
 	end
 	if s == "Blocking" and IsFacing(defender.Root, attacker.Root.Position) then
-		if attack.Tags and attack.Tags.GuardBreak then return "GuardBreak" end
+		-- knockback attacks are blocked like any other; they just carry a higher PostureDamage
 		if defender.Posture - attack.PostureDamage <= 0 then return "GuardBreak" end
 		return "Blocked"
 	end
@@ -164,6 +169,16 @@ Outcome effects:
 | GuardBreak | — | GuardBroken (long stun), posture reset |
 | Clash | both pushed back | both pushed back |
 
+Configurable parry rule (`Config.ParryRule`):
+```luau
+-- "Mirrored": defender presses the side the attack comes FROM in their own view (attacker D -> defender A)
+-- "Same":     defender presses the same key the attacker used (attacker D -> defender D)
+local function ParryMatches(rule: "Mirrored" | "Same", atkDir, incomingSide, parryDir): boolean
+	if rule == "Same" then return parryDir == atkDir end
+	return parryDir == incomingSide
+end
+```
+
 `CounterDirection` ("counter-direction dodge"): dodging *away from / perpendicular to* the incoming side. Define explicitly, e.g. incoming Left -> perfect dodge Right; incoming Right -> Left; incoming Front -> Back; Back -> Front. Using the same "direction matches a rule" check as directional parry keeps it one code path ("a tie script-wise").
 
 ## 8. Exhaustion / stamina / posture economy
@@ -175,6 +190,14 @@ One meter ("Exhaustion") is simpler: everything raises it, it decays, high exhau
 
 Server owns the values; replicate to the owner (Packet `Stamina`) and optionally others (attribute for UI over heads).
 
+## 8b. Feints (per weapon class)
+
+During **Startup** of a directional attack the attacker presses the feint key (or a different direction + M1) to cancel into another direction / back to idle for `Feint.StaminaCost`. The white telegraph already showed. This baits parries, so readable startup and feints together make the mind game. Rules: only within `Feint.Window` from the start, max one feint per attack, the server validates like any intent.
+
+## 8c. Combo breaker (optional)
+
+A "burst" button usable **while in hitstun**: costs a big chunk of stamina (or needs a full meter), pushes nearby attackers back and grants brief i-frames. It stops infinite M1 chains in 2v1s. Alternatives: hitstun decay (each consecutive hit within a chain gives less hitstun) or a max chain length before a forced knockback.
+
 ## 9. Frame data
 
 `Startup` (telegraph, readable by defender) -> `Active` (hitbox on) -> `Recovery` (punishable). For a reaction-based game, startup must exceed human reaction + ping: total ~0.35-0.5s for directional attacks, parry window ~0.15-0.25s, and show the incoming-direction indicator at startup.
@@ -183,7 +206,8 @@ Server owns the values; replicate to the owner (Packet `Stamina`) and optionally
 
 1. Client: input -> intent `Attack(Left)`; checks local state; enters `Attacking` locally (predict), plays animation, fires `Net.Input`.
 2. Server: validate (alive, state, cooldown, stamina), set authoritative state, deduct stamina, broadcast `Net.Action(actor, Attack, Left, comboIndex)` -> other clients show direction indicator/VFX (animation already replicates via Animator).
-3. Server: schedule hit window at `Startup / AttackSpeed`; query hitbox each frame during `Active`; for each target run `Resolve`; apply effects; broadcast `Net.Result(attacker, defender, outcome, damage)`.
+3. Attacker client: during `Active` the client-local HitboxClass hitbox runs; hits → `Net.HitClaim(ActionId, target, time, cf)`.
+   Server: validates the claim (state, window, rewound geometry, victim corroboration if borderline), runs `Resolve` against the defender's state **at claim time**, applies effects (damage, posture, limb meter, status effects), broadcasts `Net.Result(attacker, defender, outcome, damage)`.
 4. Clients: play reactions/VFX for `Result`; defender's client applies knockback / stun locally (it owns physics).
 5. If the server rejected step 2, it sends `Net.Cancel` to the attacker -> client stops animation and returns to Idle.
 

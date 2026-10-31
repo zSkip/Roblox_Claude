@@ -7,6 +7,8 @@ It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for 
 
 ## Skills
 
+Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, client-side hit detection with multi-client validation.
+
 Every file follows the `domain.subject.focus.skill.md` naming scheme and stays under 60 KB.
 Each file starts with YAML front-matter (`name`, `description`) so an agent can pick the right one.
 
@@ -14,12 +16,14 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 |---|---|---|
 | **lib** (third-party) | [`lib.packet.networking`](skills/lib.packet.networking.skill.md) | Packet constructor, every data type with byte cost, structs/arrays, Fire/FireClient/Response, batching, rate limits, config modules |
 | | [`lib.goodsignal.events`](skills/lib.goodsignal.events.skill.md) | GoodSignal API, full source, LIFO ordering, disconnect semantics, typed wrapper, state signals |
+| | [`lib.hitboxclass.hitbox`](skills/lib.hitboxclass.hitbox.skill.md) | HitboxClass v1.2.0 setup (Alive folder), params, spatial options, methods, signals, UseClient internals and security gaps |
 | | [`lib.profilestore.datastore`](skills/lib.profilestore.datastore.skill.md) | ProfileStore module/store/profile API, exported types, signals, constants, costs, loader template, data rules |
 | **luau** (language) | [`luau.syntax.core`](skills/luau.syntax.core.skill.md) | operators, if-expressions, interpolation, iteration, functions, errors, directives |
 | | [`luau.types.typechecking`](skills/luau.types.typechecking.skill.md) | annotations, unions/singletons, generics, typeof/export, type functions, typing classes |
 | | [`luau.stdlib.table-string-math`](skills/luau.stdlib.table-string-math.skill.md) | globals, table, string, math, bit32, utf8, os, buffer, vector, coroutine, debug |
 | | [`luau.metatables.oop-classes`](skills/luau.metatables.oop-classes.skill.md) | metamethods, classes, inheritance, proxies, blueprint/runtime, state machine, Maid |
 | | [`luau.performance.native-optimization`](skills/luau.performance.native-optimization.skill.md) | `--!native`, attributes, hot-path rules, Parallel Luau, profiling |
+| | [`luau.testing.unit-tests`](skills/luau.testing.unit-tests.skill.md) | what unit tests are, zero-dependency runner, TestEZ, Jest Lua, Lune, resolver matrix tests |
 | **roblox** (engine) | [`roblox.instance.hierarchy-services`](skills/roblox.instance.hierarchy-services.skill.md) | Instance API, attributes, tags, script containers/RunContext, require, services, Tool, project layout |
 | | [`roblox.scheduler.task-runservice-signals`](skills/roblox.scheduler.task-runservice-signals.skill.md) | task library, RunService frame order, RBXScriptSignal, deferred events, clocks, timing patterns |
 | | [`roblox.input.userinput-contextaction`](skills/roblox.input.userinput-contextaction.skill.md) | UserInputService, InputObject, input enums, ContextActionService, Input Action System, tap/hold, direction buffer |
@@ -31,11 +35,19 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 | | [`roblox.datatypes.cframe-vector-math`](skills/roblox.datatypes.cframe-vector-math.skill.md) | Vector3/Vector2/CFrame, other datatypes, Enum API, direction math |
 | | [`roblox.feedback.tween-vfx-sound-camera`](skills/roblox.feedback.tween-vfx-sound-camera.skill.md) | TweenService, Debris, particles/trails/Highlight, Sound, camera shake, combat UI, per-outcome feel |
 | | [`roblox.data.datastore-messaging-memory`](skills/roblox.data.datastore-messaging-memory.skill.md) | DataStoreService, OrderedDataStore, BindToClose, MessagingService, MemoryStoreService |
-| **game** (domain) | [`game.combat.architecture-patterns`](skills/game.combat.architecture-patterns.skill.md) | dual-context modules, schema, state machine, input layer, M1 chain, resolution matrix, exhaustion, frame data, server/client flow |
+| **project** (yours) | [`project.indexer.networking`](skills/project.indexer.networking.skill.md) | your Indexer module: API, types, bugs to fix, running it on Packet |
+| **game** (domain) | [`game.combat.architecture-patterns`](skills/game.combat.architecture-patterns.skill.md) | dual-context modules, schema, state machine, input layer, M1 chain, configurable parry rule, resolution matrix, posture/exhaustion, feints, combo breaker, server/client flow |
+| | [`game.combat.hit-validation-multiclient`](skills/game.combat.hit-validation-multiclient.skill.md) | client hit claims, server hard checks, position/state history rewind, victim corroboration, witness trust score |
+| | [`game.combat.limb-damage-highlight`](skills/game.combat.limb-damage-highlight.skill.md) | R6 direction→limb mapping, limb meters, red highlight → burst, white attack telegraph, Highlight budget |
+| | [`game.combat.animation-movement-lock`](skills/game.combat.animation-movement-lock.skill.md) | timeline lock windows, Controls:Disable, rotation lock, jump lock, anti-slide validation |
+| | [`game.status-effects.lol-stats-cc`](skills/game.status-effects.lol-stats-cc.skill.md) | LoL stats and formulas, modifier stacking, CC taxonomy, stack modes, StatBlock/StatusController, replication |
 
 ### Sources
 - ProfileStore: https://github.com/MadStudioRoblox/ProfileStore (read from the repository source and docs)
 - GoodSignal: https://gist.github.com/stravant/b75a322e0919d60dde8a0316d1f09d2f (full source)
 - Packet: https://devforum.roblox.com/t/packet-networking-library/3573907. The DevForum couldn't be reached from the build environment, so this reference was written from the v1.7.x **library source**, taken from a public mirror of the module. Check it against your copy.
+- HitboxClass: https://github.com/RedTrioVirus/HitboxClass/releases (v1.2.0 source and README)
+- Indexer: the module source you provided
+- League of Legends stats: built from LoL's public mechanics. The Trello card couldn't be reached from the build environment.
 - Luau: https://luau.org
 - Roblox Engine API: https://create.roblox.com/docs/reference/engine. Newer APIs are marked *verify* in the skills.
