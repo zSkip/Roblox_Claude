@@ -5,6 +5,8 @@ description: The user's own Indexer networking module (IndexerV2) - identifier-r
 
 # Indexer (project networking module)
 
+> **V2 status:** the built-in `Core/Net` already follows the Indexer idea (one RemoteEvent, messages routed by identifier) and, since V2, routes by a **numeric id hashed from the channel name** instead of sending the name string. Ids don't depend on definition order, and a collision errors in `Net.Define`.
+>
 > **Optional adapter.** Game code uses the `NetChannel` contract (core.contracts.interfaces §2). Your Indexer can implement that contract (adapter note in core.contracts.interfaces §2), or keep handling non-combat traffic.
 
 Purpose: route messages by **string identifier** over one or more RemoteEvents. An identifier defined on both sides forms a channel; `:Connect` registers handlers, `:Recursive` sends on the object's own identifier, `Indexer.Fire` sends on any identifier.
@@ -103,5 +105,5 @@ Differences: data becomes **positional typed arguments** instead of a free table
 
 | Message | Use |
 |---|---|
-| Combat intents, hit claims, results, stamina | Packet definitions in `Combat/Net` (or IndexerV3 over Packet) |
+| Combat intents, hit claims, results, stamina | channel definitions in `Shared/Combat/CombatNet` on Core/Net (or IndexerV3 over Packet) |
 | Low-frequency tools/admin/debug messages with free-form tables | Indexer (current) is fine after fixing §4 |

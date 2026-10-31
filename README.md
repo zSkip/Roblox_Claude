@@ -1,8 +1,9 @@
-# Roblox_Claude — Combat System v1
+# Roblox_Claude — Combat System (V2)
 
 Planning docs and reference skills for an OOP, schema-driven, reaction-based combat system on Roblox (Luau).
 It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for networking.
 
+- **V2 (current iteration):** [`docs/combat-system-v2.md`](docs/combat-system-v2.md) covers single-script architecture, animations and frame data, LoL attack speed, the tiered animation lock and what's next.
 - **Plan:** [`docs/combat-system-plan.md`](docs/combat-system-plan.md). It covers the architecture, the review of the current code, the schema, a WeaponClass sketch, combat rules, packets, milestones, open questions and improvement ideas.
 
 ## Skills
@@ -29,27 +30,29 @@ Project constraints: **R6 only**, no `Tool` class, weapons on a `Motor6D`, clien
 
 Controls: **M1** combo · **tap W/A/S/D then M1** directional attack (S = knockback) · **hold F** block · **tap direction then F** parry · **Q** dodge (tap a direction first, default back). The label over an attacker names the key that parries it under the current `ParryRule`. Built around shift-lock: without it, your character turns to the camera when you act.
 
-The animations are placeholders (`rbxassetid://0`), so the sword swings procedurally and every state shows a coloured highlight. Put real ids into the `LinkedSword` schema later; no logic changes.
+The directional M1s (W/A/S/D + M1) and dodges (W/A/S/D + Q: Crouch, side steps, BackDodge) play the real animations in `ReplicatedStorage/Assets/Animations`. Combo M1s, block and parry are still placeholders (`rbxassetid://0`), so they swing procedurally. Every state shows a coloured highlight. The animations are R6, so the avatar must be R6 (see step 1). After uploading or changing an animation, run `require(game.ServerScriptService.Tools.AnimationBake).Run()` in the command bar.
 
 ## Code
 
+Single-script architecture: `ServerScriptService/Main` and `StarterPlayerScripts/Main` are the only scripts. Everything else is a module run by `Core/Loader` (`Init`, then `Start`). See [`roblox.architecture.single-script-ssa`](skills/roblox.architecture.single-script-ssa.skill.md).
+
 | Path | What |
 |---|---|
-| `src/ReplicatedStorage/Core/` | contracts with built-in implementations: `Signal`, `Net` (one batched RemoteEvent + type checks), `Hitbox`, `Maid`, `Deps` (the one place to swap in adapters) |
-| `src/ReplicatedStorage/Combat/WeaponClass.luau` (+ spec) | the dual-context weapon constructor: `Define` (validate + freeze + attack registry), builder sugar, per-owner `Runtime` state machine, combo, cooldowns |
-| `src/ReplicatedStorage/Combat/Weapons/LinkedSword.luau` | first weapon schema (combo, directionals, CounterSlash follow-up, defense, limbs) |
-| `src/ReplicatedStorage/Combat/Combatant.luau` (+ spec) | per-character combat state shared by players and NPCs: posture, exhaustion debuff, limb meters, resolver snapshot, walk speed |
-| `src/ReplicatedStorage/Combat/WeaponModel.luau` / `Movement.luau` / `Limbs.luau` | Motor6D weapon attach (procedural sword), dash/knockback bursts, limb group registry |
-| `src/ReplicatedStorage/Combat/CombatConfig.luau` / `CombatEnums.luau` / `Net.luau` | global tuning, network ids, combat channels |
-| `src/ServerScriptService/Combat/` | `CombatServer` (entry), `CombatService` (intents, claims, resolution, effects), `Dummies` (training NPCs) |
-| `src/StarterPlayerScripts/Combat/` | `CombatClient` (input → intents, local hitbox → claims), `Fx` (telegraphs, swings, popups, limb highlights), `Hud` |
-| `src/ReplicatedStorage/TestKit.luau` | zero-dependency unit test kit (`Describe` / `It` / `Expect`) |
-| `src/ServerScriptService/Tests/RunTests.server.luau` | runs every `*.spec` module when you press Play in Studio |
-| `src/ReplicatedStorage/Combat/Directions.luau` (+ spec) | direction mirror/opposite, incoming side, configurable parry / counter-dodge matcher |
-| `src/ReplicatedStorage/Combat/Exhaustion.luau` (+ spec) | in-combat exhaustion stacks, scaling debuff intensity, out-of-combat decay |
-| `src/ReplicatedStorage/Combat/Resolver.luau` (+ spec) | attack vs defense → Outcome (full plan §7 matrix) and per-outcome consequences |
-| `src/ReplicatedStorage/Combat/Attacks.luau` (+ spec) | AttackDef registry: register, priority matching, build from a weapon schema |
-| `src/ReplicatedStorage/Combat/Stats.luau` (+ spec) | LoL stat formulas and the StatBlock modifier container |
+| `src/ReplicatedStorage/Core/` | `Loader` (SSA lifecycle), contracts with built-in implementations: `Signal`, `Net` (one batched RemoteEvent, type checks, hashed channel ids), `Hitbox`, `Maid`, `Deps` (the one place to swap in adapters), `TestKit` |
+| `src/ReplicatedStorage/Shared/Combat/WeaponClass.luau` (+ spec) | the dual-context weapon constructor: `Define` (validate + freeze + attack registry), builder sugar, per-owner `Runtime` state machine, combo, cooldowns, `LoadAll` |
+| `src/ReplicatedStorage/Shared/Combat/Timeline.luau` (+ spec) | attack frame data from the animation manifest (last 16 frames = hit) or the spec, scaled by attack speed with LoL's windup rule |
+| `src/ReplicatedStorage/Shared/Combat/LockProfile.luau` (+ spec) | tiered animation lock: per-frame move / turn / jump shares, server travel cap |
+| `src/ReplicatedStorage/Shared/Combat/AnimationPlayer.luau` / `AnimationManifest.luau` | two-speed attack playback on either side, length check; baked lengths and markers (generated) |
+| `src/ReplicatedStorage/Shared/Combat/Weapons/LinkedSword.luau` | first weapon schema (combo, directionals, CounterSlash follow-up, defense, limbs, animation ids) |
+| `src/ReplicatedStorage/Shared/Combat/Combatant.luau` (+ spec) | per-character combat state shared by players and NPCs: posture, exhaustion debuff, limb meters, resolver snapshot, walk cap |
+| `src/ReplicatedStorage/Shared/Combat/WeaponModel.luau` / `Movement.luau` / `Limbs.luau` | Motor6D weapon attach (procedural sword), dash/knockback bursts, limb group registry |
+| `src/ReplicatedStorage/Shared/Combat/CombatConfig.luau` / `CombatEnums.luau` / `CombatNet.luau` | global tuning (animation, attack speed, lock), network ids, combat channels |
+| `src/ReplicatedStorage/Shared/Combat/Directions.luau`, `Exhaustion.luau`, `Resolver.luau`, `Attacks.luau`, `Stats.luau` (+ specs) | direction rules, exhaustion stacks, outcome matrix, AttackDef registry, LoL stat math + StatBlock |
+| `src/ReplicatedStorage/Assets/Animations/` | the Animation instances (`*.model.json` for Rojo) |
+| `src/ServerScriptService/Main.server.luau` + `Services/` | `CombatService` (combatants, state machine, regen), `HitService` (hitboxes, claims + anti-slide, resolution), `IntentService` (rate-limited intents), `PlayerService`, `AnimationService` (NPC animations), `DummyService` (training NPCs), `TestService` (runs specs in Studio) |
+| `src/ServerScriptService/Tests/` | `*.spec` unit tests (Loader, Timeline, LockProfile, plus the M1/M2 ones) |
+| `src/ServerScriptService/Tools/AnimationBake.luau` | Studio-only: bakes `Assets/Animations` into `AnimationManifest` |
+| `src/StarterPlayerScripts/Main.client.luau` + `Controllers/` | `CombatController` (own character, intents, local hitbox → claims, broadcasts), `InputController` (direction + input buffer), `AnimationController`, `MovementController` (lock), `FxController`, `HudController` |
 | `default.project.json` | Rojo mapping (optional, see Playtest) |
 
 Every file follows the `domain.subject.focus.skill.md` naming scheme and stays under 60 KB.
@@ -68,7 +71,8 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 | | [`luau.metatables.oop-classes`](skills/luau.metatables.oop-classes.skill.md) | metamethods, classes, inheritance, proxies, blueprint/runtime, state machine, Maid |
 | | [`luau.performance.native-optimization`](skills/luau.performance.native-optimization.skill.md) | `--!native`, attributes, hot-path rules, Parallel Luau, profiling |
 | | [`luau.testing.unit-tests`](skills/luau.testing.unit-tests.skill.md) | what unit tests are, zero-dependency runner, TestEZ, Jest Lua, Lune, resolver matrix tests |
-| **roblox** (engine) | [`roblox.instance.hierarchy-services`](skills/roblox.instance.hierarchy-services.skill.md) | Instance API, attributes, tags, script containers/RunContext, require, services, Tool, project layout |
+| **roblox** (engine) | [`roblox.architecture.single-script-ssa`](skills/roblox.architecture.single-script-ssa.skill.md) | V2 single-script architecture: one Script / one LocalScript, Loader Init/Start lifecycle, Services vs Controllers vs shared modules, layout, wiring, pitfalls |
+| | [`roblox.instance.hierarchy-services`](skills/roblox.instance.hierarchy-services.skill.md) | Instance API, attributes, tags, script containers/RunContext, require, services, Tool, project layout |
 | | [`roblox.scheduler.task-runservice-signals`](skills/roblox.scheduler.task-runservice-signals.skill.md) | task library, RunService frame order, RBXScriptSignal, deferred events, clocks, timing patterns |
 | | [`roblox.input.userinput-contextaction`](skills/roblox.input.userinput-contextaction.skill.md) | UserInputService, InputObject, input enums, ContextActionService, Input Action System, tap/hold, direction buffer |
 | | [`roblox.animation.animator-tracks`](skills/roblox.animation.animator-tracks.skill.md) | Animator, AnimationTrack, priorities, preloading, Length gotcha, replication, combat patterns |
@@ -92,6 +96,7 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 - Packet: https://devforum.roblox.com/t/packet-networking-library/3573907. The DevForum couldn't be reached from the build environment, so this reference was written from the v1.7.x **library source**, taken from a public mirror of the module. Check it against your copy.
 - HitboxClass: https://github.com/RedTrioVirus/HitboxClass/releases (v1.2.0 source and README)
 - Indexer: the module source you provided
-- League of Legends stats: built from LoL's public mechanics. The Trello card couldn't be reached from the build environment.
+- League of Legends stats: the Trello card "League of Legends Stats" (GameIdeasDoc board) and LoL's public mechanics; attack speed / windup formula from the LoL wiki.
+- Single-script architecture: the DevForum threads listed in `roblox.architecture.single-script-ssa`.
 - Luau: https://luau.org
 - Roblox Engine API: https://create.roblox.com/docs/reference/engine. Newer APIs are marked *verify* in the skills.

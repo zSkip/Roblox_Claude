@@ -1,4 +1,4 @@
-local Directions = require(game:GetService("ReplicatedStorage"):WaitForChild("Combat"):WaitForChild("Directions"))
+local Directions = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat"):WaitForChild("Directions"))
 
 return function(Describe, It, Expect)
 	Describe("IncomingSide", function()

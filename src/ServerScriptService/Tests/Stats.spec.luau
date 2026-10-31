@@ -1,4 +1,4 @@
-local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Combat")
+local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat")
 local Stats = require(Combat:WaitForChild("Stats"))
 
 return function(Describe, It, Expect)

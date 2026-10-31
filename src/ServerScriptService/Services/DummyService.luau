@@ -11,12 +11,20 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Directions = require(ReplicatedStorage.Combat.Directions)
-local Resolver = require(ReplicatedStorage.Combat.Resolver)
-local Config = require(ReplicatedStorage.Combat.CombatConfig)
-local Service = require(script.Parent.CombatService)
+local Combat = ReplicatedStorage.Shared.Combat
+local Directions = require(Combat.Directions)
+local Resolver = require(Combat.Resolver)
+local Config = require(Combat.CombatConfig)
 
-local Dummies = {}
+local Dummies = { Priority = 60 }
+
+local Service : any = nil -- CombatService
+local Hits : any = nil -- HitService
+
+function Dummies.Init(_self : any, Get : (string) -> any)
+	Service = Get("CombatService")
+	Hits = Get("HitService")
+end
 
 local Colors = {
 	Bag = Color3.fromRGB(163, 162, 165),
@@ -148,7 +156,7 @@ function Brains.Dodger(D : any)
 			Service.Dodge(D, Directions.Opposite[Incoming])
 		end)
 	end))
-	Own(D, Service.Resolved:Connect(function(A : any, Def : any, Outcome : string)
+	Own(D, Hits.Resolved:Connect(function(A : any, Def : any, Outcome : string)
 		if Def == D and Outcome == "PerfectDodge" then
 			-- attack as soon as the dodge ends, still inside the follow-up window
 			local DodgeEnds = (D.DodgeStart or os.clock()) + D.Schema.Defense.DodgeDuration
@@ -256,6 +264,10 @@ function Dummies.SpawnAll()
 		end
 		task.spawn(Dummies.Spawn, Kind, CF)
 	end
+end
+
+function Dummies.Start(_self : any)
+	Dummies.SpawnAll()
 end
 
 return Dummies

@@ -217,7 +217,7 @@ Both sides must ship identical lists (they are in ReplicatedStorage, so they do)
 ## 10. Patterns
 
 ```luau
--- ReplicatedStorage/Combat/Net.luau  (shared; no IsServer checks needed)
+-- ReplicatedStorage/Shared/Combat/CombatNet.luau  (shared; no IsServer checks needed)
 local Packet = require(game.ReplicatedStorage.Packages.Packet)
 return {
 	Input   = Packet("CombatInput", Packet.NumberU8, Packet.NumberU8, Packet.NumberF64),          -- action, direction, clientServerTime

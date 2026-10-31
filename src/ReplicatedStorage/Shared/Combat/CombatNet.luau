@@ -1,7 +1,7 @@
 --!strict
 -- Combat channels (plan §10). Required identically by the server and the client.
 
-local Net = require(script.Parent.Parent.Core.Deps).Net
+local Net = require(game:GetService("ReplicatedStorage").Core.Deps).Net
 
 return table.freeze({
 	-- client → server

@@ -25,10 +25,11 @@ return table.freeze({
 	BaseWalkSpeed = 16,
 	BaseJumpHeight = 7.2,
 
-	-- walk speed multiplier per state (movement lock; jump is disabled outside Idle)
+	-- walk speed cap per state; players' MovementController shapes it with LockProfile (jump only in Idle).
+	-- Attacking is 1 because the lock curve does the slowing; NPCs are rooted while attacking.
 	StateWalk = table.freeze({
 		Idle = 1,
-		Attacking = 0.35,
+		Attacking = 1,
 		Blocking = 0.5, -- times the weapon's BlockWalkSpeedMultiplier
 		Parrying = 0.5,
 		Dodging = 1,
@@ -51,4 +52,25 @@ return table.freeze({
 
 	-- limbs
 	LimbDecayDelay = 3,
+
+	-- V2 animations: an attack with an animation takes its frame data from the baked AnimationManifest
+	Animation = table.freeze({
+		Fps = 60,
+		HitFrames = 16, -- without markers, the last 16 frames of an attack animation are the hit; the rest is windup
+	}),
+
+	-- V2 attack speed (Timeline, LoL rule): Windup = BaseWindup + (AttackTime × WindupPercent − BaseWindup) × WindupModifier
+	WindupModifier = 0.5, -- 1 = windup scales like the swing, 0 = never changes; specs may override
+	MaxWindupShare = 0.9, -- the windup never takes more than this share of the attack time
+
+	-- V2 tiered animation lock (LockProfile, MovementController)
+	Lock = table.freeze({
+		WindupMoveExponent = 1, -- move share over the windup: (1 - t)^k, 1 = linear to stillness
+		WindupTurnEnd = 0.35, -- share of TurnRate left on the last windup frame
+		ActiveTurn = 0,
+		RecoveryTurn = 0.25,
+		RecoveryReleaseAt = 0.5, -- movement ramps back over the last half of recovery
+		TurnRate = math.rad(720), -- radians per second at Turn = 1
+		SlideSlack = 3, -- studs of latency slack in the server's windup travel check
+	}),
 })

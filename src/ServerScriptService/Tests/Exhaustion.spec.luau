@@ -1,4 +1,4 @@
-local Exhaustion = require(game:GetService("ReplicatedStorage"):WaitForChild("Combat"):WaitForChild("Exhaustion"))
+local Exhaustion = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat"):WaitForChild("Exhaustion"))
 
 return function(Describe, It, Expect)
 	local Config = Exhaustion.DefaultConfig -- M1sPerStack 2, HeavyStack 3, Threshold 6

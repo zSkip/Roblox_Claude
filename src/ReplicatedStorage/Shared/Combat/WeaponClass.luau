@@ -8,12 +8,10 @@
 --   local Rt = Sword:Instantiate(CharacterModel)      -- one runtime per owner, per side
 --   Rt:SetState("Attacking", Context)  Rt:MatchAttack(Direction, Now)  Rt:Destroy()
 
-local Signal = require(script.Parent.Parent.Core.Deps).Signal
+local Signal = require(game:GetService("ReplicatedStorage").Core.Deps).Signal
 local Attacks = require(script.Parent.Attacks)
 local Directions = require(script.Parent.Directions)
 local CombatEnums = require(script.Parent.CombatEnums)
-
-export type Timeline = { Startup : number, Active : number, Recovery : number, Total : number }
 
 local WeaponClass = {}
 WeaponClass.Definitions = {} :: { [string]: any }
@@ -108,13 +106,13 @@ local function DeepFreeze(T : any)
 	table.freeze(T)
 end
 
--- schema timings scaled by attack speed (> 1 = faster)
-function WeaponClass.Timeline(Spec : { [string]: any }, AttackSpeed : number?) : Timeline
-	local Speed = math.max(AttackSpeed or 1, 0.05)
-	local Startup = Spec.Startup / Speed
-	local Active = Spec.Active / Speed
-	local Recovery = Spec.Recovery / Speed
-	return { Startup = Startup, Active = Active, Recovery = Recovery, Total = Startup + Active + Recovery }
+-- requires every module in Weapons once; each registers itself through Define (frame data: Combat/Timeline)
+function WeaponClass.LoadAll()
+	for _, Module in script.Parent.Weapons:GetChildren() do
+		if Module:IsA("ModuleScript") then
+			(require :: any)(Module)
+		end
+	end
 end
 
 -- "M1.2" -> Animations.M1[2], "Directional.Front" -> Animations.Directional.Front

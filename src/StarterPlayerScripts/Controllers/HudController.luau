@@ -4,9 +4,9 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config = require(ReplicatedStorage:WaitForChild("Combat"):WaitForChild("CombatConfig"))
+local Config = require(ReplicatedStorage.Shared.Combat.CombatConfig)
 
-local Hud = {}
+local Hud = { Priority = 10 }
 
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "CombatHud"
@@ -74,7 +74,7 @@ function Hud.SetMeters(Posture : number, Stacks : number)
 	end
 end
 
-function Hud.Mount()
+function Hud.Start(_self : any)
 	Gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 end
 

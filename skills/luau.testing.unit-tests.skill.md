@@ -16,13 +16,13 @@ For this project the high-value targets are the **pure** modules in `ReplicatedS
 
 Tests let you change balance or refactor and know instantly if parry/dodge logic broke. Design consequence: keep the logic **free of Instances and clocks** (pass `now`, CFrames and states in as arguments).
 
-## 2. TestKit (this repo: `src/ReplicatedStorage/TestKit.luau`)
+## 2. TestKit (this repo: `src/ReplicatedStorage/Core/TestKit.luau`)
 
-Zero dependencies, about 150 lines. Specs are ModuleScripts named `*.spec`. `src/ServerScriptService/Tests/RunTests.server.luau` runs every spec under its folder when you press **Play in Studio** and does nothing in live servers. Results go to Output.
+Zero dependencies, about 150 lines. Specs are ModuleScripts named `*.spec`. `ServerScriptService/Services/TestService` (an SSA lifecycle module, priority 1000) runs every spec under `ServerScriptService/Tests` once the game has booted in **Play in Studio**, and does nothing in live servers. Results go to Output.
 
 ```luau
 -- ServerScriptService/Tests/Directions.spec  (ModuleScript)
-local Directions = require(game.ReplicatedStorage.Combat.Directions)
+local Directions = require(game.ReplicatedStorage.Shared.Combat.Directions)
 
 return function(Describe, It, Expect)
 	Describe("Matches", function()
@@ -38,7 +38,7 @@ end
 Matchers: `ToBe`, `ToEqual` (deep), `ToBeNear(n, eps?)`, `ToBeTruthy`, `ToBeFalsy`, `ToBeNil`, `ToThrow(pattern?)`, and `.Never.` to invert.
 API: `TestKit.Run({ModuleScript})`, `TestKit.RunIn(root)`, `TestKit.Report(results)`. A spec that fails to load counts as a failure and doesn't stop the others.
 
-Without Rojo: create the ModuleScripts by hand with the same names (`TestKit` in ReplicatedStorage, the `Tests` folder in ServerScriptService, `RunTests` as a Script).
+Without Rojo: create the ModuleScripts by hand with the same names (`TestKit` in ReplicatedStorage.Core, the `Tests` folder in ServerScriptService). Lifecycle wiring is tested with `Loader.RunModules` (roblox.architecture.single-script-ssa §7).
 
 ## 3. TestEZ (Roblox's classic BDD framework)
 

@@ -1,19 +1,21 @@
 --!strict
 -- Client-side feedback for every combatant: state highlights (white = incoming attack telegraph),
--- a direction label so defenders can react (G9), procedural weapon swings while animations are
--- placeholders, hit-area flashes, result popups and red limb-meter highlights.
+-- a direction label so defenders can react (G9), procedural weapon swings for attacks whose animation
+-- is still a placeholder, hit-area flashes, result popups and red limb-meter highlights.
+-- Called by CombatController for every broadcast; has no lifecycle of its own.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
-local Combat = ReplicatedStorage:WaitForChild("Combat")
-local WeaponClass = require(Combat:WaitForChild("WeaponClass"))
-local WeaponModel = require(Combat:WaitForChild("WeaponModel"))
-local Directions = require(Combat:WaitForChild("Directions"))
-local Limbs = require(Combat:WaitForChild("Limbs"))
-local Config = require(Combat:WaitForChild("CombatConfig"))
+local Combat = ReplicatedStorage.Shared.Combat
+local WeaponClass = require(Combat.WeaponClass)
+local WeaponModel = require(Combat.WeaponModel)
+local Directions = require(Combat.Directions)
+local Limbs = require(Combat.Limbs)
+local Timeline = require(Combat.Timeline)
+local Config = require(Combat.CombatConfig)
 
-local Fx = {}
+local Fx = { Priority = 10 }
 
 local StateColors : { [string]: Color3 } = {
 	Attacking = Color3.fromRGB(255, 255, 255),
@@ -171,8 +173,9 @@ function Fx.OnState(Model : Model, State : string, Direction : string?, AttackId
 		if not Attack then
 			return
 		end
-		local T = WeaponClass.Timeline(Attack.Spec, Model:GetAttribute("AttackSpeed") :: number?)
+		local T = Timeline.ForAttack(Def.Schema, Attack.Spec, Model:GetAttribute("AttackSpeed") :: number?)
 		local Swing = Swings[Attack.Spec.Swing or Direction or "Right"] or Swings.Right
+		local Animated = T.AnimationId ~= nil -- a real animation moves the arm; skip the procedural swing
 
 		-- startup: white telegraph + direction label
 		H.FillColor = StateColors.Attacking
@@ -182,7 +185,9 @@ function Fx.OnState(Model : Model, State : string, Direction : string?, AttackId
 		L.Text = Describe(Attack, Direction)
 		L.TextColor3 = if Attack.Spec.Knockback then Color3.fromRGB(255, 170, 80) else Color3.new(1, 1, 1)
 		L.Visible = not IsLocal
-		TweenGrip(Model, Swing[1], T.Startup)
+		if not Animated then
+			TweenGrip(Model, Swing[1], T.Startup)
+		end
 
 		task.delay(T.Startup, function()
 			if A.Token ~= Token then
@@ -190,7 +195,9 @@ function Fx.OnState(Model : Model, State : string, Direction : string?, AttackId
 			end
 			H.FillColor = Color3.fromRGB(255, 150, 60)
 			H.FillTransparency = 0.2
-			TweenGrip(Model, Swing[2], T.Active)
+			if not Animated then
+				TweenGrip(Model, Swing[2], T.Active)
+			end
 			SlashFlash(Model, Attack.Spec.Hitbox)
 		end)
 		task.delay(T.Startup + T.Active, function()
@@ -199,7 +206,9 @@ function Fx.OnState(Model : Model, State : string, Direction : string?, AttackId
 			end
 			H.Enabled = false
 			L.Visible = false
-			TweenGrip(Model, Rest, T.Recovery)
+			if not Animated then
+				TweenGrip(Model, Rest, T.Recovery)
+			end
 		end)
 		return
 	end

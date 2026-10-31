@@ -5,6 +5,27 @@ description: Locking character movement/rotation/jumping during specific parts o
 
 # Animation-Timeline Movement Locks
 
+## V2: what the project ships (tiered lock)
+
+The project uses **tiers sampled every frame**, not on/off windows. `Shared/Combat/LockProfile` is pure:
+`Sample(State, Elapsed, Timeline, Config.Lock) -> { Tier, Move, Turn, Jump }`
+
+| Tier | When | Move | Turn |
+|---|---|---|---|
+| Free 0 | Idle | 1 | AutoRotate |
+| Steer 1 | attack windup; block / parry | windup: `(1 - t)^WindupMoveExponent`, eases to 0 on the last windup frame; block: 1 × the block walk cap | windup: 1 → `WindupTurnEnd`; block: 1 |
+| Rooted 2 | hit frames, recovery, dodges | 0, then ramps 0 → 1 over the part of recovery after `RecoveryReleaseAt` | `ActiveTurn` / `RecoveryTurn` (dodge: 0, hold facing) |
+| Locked 3 | Stunned, GuardBroken, Dead | 0 | 0 |
+| Forced 4 | reserved: knockback / airborne | physics drives | 0 |
+
+- The windup length comes from the attack's `Timeline` (Combat/Timeline: animation frames scaled by attack speed). Faster attacks lock sooner but keep the same curve shape.
+- **Client (MovementController, RenderStep):** `Humanoid.WalkSpeed = WalkCap × Move`. `WalkCap` is an attribute the server sets per state. Outside Free, `AutoRotate = false` and a `CombatTurn` AlignOrientation steers toward the camera's yaw with `MaxAngularVelocity = Lock.TurnRate × Turn`. At Turn 0 it holds the current facing.
+- **Server (HitService.Claim):** `LockProfile.MaxTravel(Timeline, Elapsed, WalkCap, Config.Lock) + Lock.SlideSlack` is the farthest the attacker may have moved since the attack started. A claim from an attacker past that limit is rejected with a warning (anti-slide).
+- NPCs are rooted server-side while attacking (`WalkSpeed = 0`).
+- Tuning is all in `CombatConfig.Lock`.
+
+The sections below are the original design notes (windows, Controls:Disable) and are still valid alternatives.
+
 Goal: while an action's animation is between time A and B, the player can't walk, turn or jump (or only some of those), so the animation reads naturally and can't be "slid" or "spun".
 
 ## 1. Define windows (schema)

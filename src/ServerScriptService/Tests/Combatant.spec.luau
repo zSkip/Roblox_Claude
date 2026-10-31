@@ -1,4 +1,4 @@
-local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Combat")
+local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat")
 local Combatant = require(Combat:WaitForChild("Combatant"))
 local Config = require(Combat:WaitForChild("CombatConfig"))
 local Limbs = require(Combat:WaitForChild("Limbs"))

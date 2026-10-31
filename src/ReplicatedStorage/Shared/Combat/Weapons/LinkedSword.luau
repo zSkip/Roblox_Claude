@@ -1,7 +1,8 @@
 --!strict
 -- LinkedSword: the first weapon definition (plan §4). Pure data + builder sugar; no side-specific code.
--- Animations are placeholders (rbxassetid://0): the client falls back to procedural weapon swings,
--- and swapping in real ids changes no logic.
+-- Animations: the directional M1s and dodges use ReplicatedStorage.Assets.Animations (60 fps, frame data
+-- from the baked AnimationManifest). The rest are placeholders (rbxassetid://0): those fall back to
+-- procedural weapon swings and the spec's Startup / Active / Recovery.
 
 local WeaponClass = require(script.Parent.Parent.WeaponClass)
 
@@ -36,10 +37,22 @@ local LinkedSword = WeaponClass.Define({
 	Animations = {
 		Idle = "rbxassetid://0",
 		M1 = { "rbxassetid://0", "rbxassetid://0", "rbxassetid://0", "rbxassetid://0" },
-		Directional = { Front = "rbxassetid://0", Back = "rbxassetid://0", Left = "rbxassetid://0", Right = "rbxassetid://0" },
+		-- W/A/S/D + M1
+		Directional = {
+			Front = "rbxassetid://77985045543593", -- W_Hit
+			Left = "rbxassetid://128553011522756", -- A_Hit
+			Back = "rbxassetid://80985889711180", -- S_Hit
+			Right = "rbxassetid://119438740435237", -- D_Hit
+		},
 		Parry = { Front = "rbxassetid://0", Back = "rbxassetid://0", Left = "rbxassetid://0", Right = "rbxassetid://0" },
 		Block = "rbxassetid://0",
-		Dodge = { Front = "rbxassetid://0", Back = "rbxassetid://0", Left = "rbxassetid://0", Right = "rbxassetid://0" },
+		-- W/A/S/D + Q
+		Dodge = {
+			Front = "rbxassetid://132645008089719", -- Crouch
+			Left = "rbxassetid://109384176902426", -- A_SideStep
+			Back = "rbxassetid://82135177215001", -- BackDodge
+			Right = "rbxassetid://128034216892920", -- D_SideStep
+		},
 		FollowUp = { CounterSlash = "rbxassetid://0" },
 	},
 

@@ -7,7 +7,9 @@ description: Combat system design patterns for Roblox fighting games - dual-cont
 
 Project decisions: **R6 only**, weapons are Models on a `Motor6D` (no `Tool`), **client-side hit detection with multi-client validation** (game.combat.hit-validation-multiclient), knockback attacks are **blockable** (they deal higher posture damage), the parry direction rule is a **config value**.
 
-Companion skills: core.contracts.interfaces, game.combat.limb-damage-highlight, game.combat.animation-movement-lock, game.status-effects.lol-stats-cc, roblox.input.userinput-contextaction, roblox.animation.animator-tracks, roblox.spatial.raycast-overlap-hitbox, roblox.physics.movers-knockback, roblox.network.remotes-replication-security.
+Code organisation (V2): single-script architecture, see roblox.architecture.single-script-ssa. "Entry script of each side" below means that side's services (server) or controllers (client).
+
+Companion skills: roblox.architecture.single-script-ssa, core.contracts.interfaces, game.combat.limb-damage-highlight, game.combat.animation-movement-lock, game.status-effects.lol-stats-cc, roblox.input.userinput-contextaction, roblox.animation.animator-tracks, roblox.spatial.raycast-overlap-hitbox, roblox.physics.movers-knockback, roblox.network.remotes-replication-security.
 
 ## 1. Dual-context modules (no IsServer/IsClient in shared code)
 

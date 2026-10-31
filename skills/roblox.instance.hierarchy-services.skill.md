@@ -73,7 +73,7 @@ Tags replicate. Use tags for "dummies", "breakables", hitbox-ignore parts.
 - Require by string path (newer): `require("./Signal")`, `require("@game/ReplicatedStorage/Core/Net")` - verify Studio support/aliases before relying on it.
 - A module erroring during require = every future require of it errors.
 
-"Dual context" module = ModuleScript in ReplicatedStorage with no `RunService:IsServer()` branches; side-specific code is **injected** by the server/client entry scripts (adapters, signal connections).
+"Dual context" module = ModuleScript in ReplicatedStorage with no `RunService:IsServer()` branches; side-specific code is **injected** by each side's services/controllers (adapters, signal connections). See roblox.architecture.single-script-ssa.
 
 ## 5. Services (game:GetService)
 
@@ -130,22 +130,26 @@ weaponModel.Parent = character
 ```
 Mark weapon parts `CanCollide=false`, `Massless=true`, `CanQuery=false` (hitboxes must not detect the weapon), unanchored. To animate the weapon, add the same `Motor6D` (same name, Part0 `Right Arm`, Part1 the handle) to the rig in the Animation Editor; keyframes on that joint then drive the weapon in game.
 
-## 8. Suggested project layout
+## 8. Project layout (V2: single-script architecture)
+
+One Script and one LocalScript; everything else is a ModuleScript run by `Core/Loader`. Full rules are in roblox.architecture.single-script-ssa.
 
 ```
 ReplicatedStorage
-├─ Core            (Deps, Signal, Net, Hitbox, Maid - built-in contracts)
+├─ Core            (Loader, Deps, Signal, Net, Hitbox, Maid, TestKit - infrastructure)
 ├─ Packages        (optional third-party adapters)
-├─ Combat
-│  ├─ WeaponClass  (dual-context constructor)
-│  ├─ Types / Enums / Config
-│  ├─ Resolver     (pure outcome logic)
-│  ├─ Net          (channel definitions)
-│  └─ Weapons      (definition modules)
-└─ Assets (Animations, VFX, Models)
+├─ Shared
+│  └─ Combat       (plain-required game modules: WeaponClass, Resolver, Timeline, LockProfile,
+│                   AnimationPlayer, CombatConfig/Enums, CombatNet channels, Weapons/...)
+└─ Assets          (Animations, later VFX, Models)
 ServerScriptService
-├─ Core/SessionStore
-└─ CombatServer (entry)   + Data (profiles)
+├─ Main            (the only Script: Loader.Run({ Services }))
+├─ Services        (CombatService, HitService, IntentService, PlayerService, AnimationService,
+│                   DummyService, TestService; later Data/SessionStore)
+├─ Tests           (*.spec)
+└─ Tools           (Studio command-bar tools)
 StarterPlayerScripts
-└─ CombatClient (entry)
+├─ Main            (the only LocalScript: Loader.Run({ Controllers }))
+└─ Controllers     (CombatController, InputController, AnimationController, MovementController,
+                    FxController, HudController)
 ```

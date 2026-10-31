@@ -87,7 +87,16 @@ end
 - `AnimationController` + `Animator` on a non-character model: server-played tracks replicate.
 - Animation assets must be owned by the experience owner (user/group) or they fail to load in live games.
 
-## 7. Combat patterns
+## 7. Project (V2): manifest, frame data, two-speed playback
+
+- **Frame data never comes from playing tracks.** `ServerScriptService/Tools/AnimationBake` (Studio command bar) reads every Animation in `ReplicatedStorage/Assets/Animations` with `KeyframeSequenceProvider:GetKeyframeSequenceAsync` and writes `Shared/Combat/AnimationManifest`: `{ Fps = 60, ById = { [id] = { Name, Length, Looped, Markers } } }`. Both sides read it, so the server validates timing without an Animator.
+- **Hit frames:** the `Windup` / `HitEnd` KeyframeMarkers if present; otherwise the last `CombatConfig.Animation.HitFrames` (16) frames. Everything before is windup (Combat/Timeline).
+- **Runtime check:** `Shared/Combat/AnimationPlayer` loads tracks on either side and warns once per id if `Track.Length` differs from the manifest by more than one frame (a stale bake).
+- **Attack speed:** `AnimationPlayer:PlayAttack(Id, Timeline)` plays at `Timeline.WindupSpeed`, then `AdjustSpeed(Timeline.ActiveSpeed)` at the first hit frame (LoL windup rule, game.combat.architecture-patterns + Combat/Timeline). Dodges use `PlayFor(Id, Duration)` (one-shot clips are stretched to fit, looped ones are stopped when the duration ends).
+- **Who plays what:** the owner client animates its own character (AnimationController), and the server animates NPCs (AnimationService). Each track replicates once.
+- The client preloads every asset with `ContentProvider:PreloadAsync` and loads every track on spawn, so the first swing doesn't stall.
+
+## 8. Combat patterns
 
 ### Track cache per character (load once)
 ```luau

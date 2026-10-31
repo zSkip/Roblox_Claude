@@ -7,6 +7,8 @@
 --   Server: Ch:Fire(...) (all), Ch:FireClient(Player, ...), Ch:FireExcept(Player, ...)
 --   Client: Ch:OnClient(function(...) end)
 -- Incoming values that don't match the declared types drop the whole message.
+-- Indexer standard (V2): each channel travels as a numeric id hashed from its name, so both sides agree on
+-- ids no matter which order modules define channels in; a hash collision errors at Define time.
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -46,6 +48,16 @@ local Checks : { [string]: (any) -> boolean } = {
 
 local Net = {}
 local Channels : { [string]: any } = {}
+local ById : { [number]: any } = {}
+
+-- djb2 kept below 2^24 so the arithmetic stays exact in doubles
+local function Hash(Name : string) : number
+	local H = 5381
+	for I = 1, #Name do
+		H = (H * 33 + string.byte(Name, I)) % 16777213
+	end
+	return H
+end
 
 local Outgoing : { any } = {}
 local PerPlayer : { [Player]: { any } } = {}
@@ -58,8 +70,11 @@ function Net.Define(Name : string, Types : { string })
 	for _, T in Types do
 		assert(Checks[T], `unknown type token {T}`)
 	end
-	local Ch = setmetatable({ Name = Name, Types = Types, _signal = Signal.new() }, Channel)
+	local Id = Hash(Name)
+	assert(ById[Id] == nil, `channel {Name} collides with {ById[Id] and ById[Id].Name}; rename one`)
+	local Ch = setmetatable({ Name = Name, Id = Id, Types = Types, _signal = Signal.new() }, Channel)
 	Channels[Name] = Ch
+	ById[Id] = Ch
 	return Ch
 end
 
@@ -70,7 +85,7 @@ local function Pack(Ch : any, ... : any)
 	for I = 1, N do
 		Args[tostring(I)] = (select(I, ...))
 	end
-	return { c = Ch.Name, a = Args }
+	return { c = Ch.Id, a = Args }
 end
 
 function Channel.Fire(self : any, ... : any)
@@ -123,7 +138,7 @@ local function Deliver(Batch : any, Player : Player?)
 		return -- crude flood guard on client → server traffic
 	end
 	for _, Msg in Batch do
-		local Ch = type(Msg) == "table" and type(Msg.c) == "string" and Channels[Msg.c]
+		local Ch = type(Msg) == "table" and type(Msg.c) == "number" and ById[Msg.c]
 		if Ch then
 			local Ok, A = Unpack(Ch, Msg.a)
 			if Ok and A then

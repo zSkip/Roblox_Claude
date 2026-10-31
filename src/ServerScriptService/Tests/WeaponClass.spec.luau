@@ -1,4 +1,4 @@
-local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Combat")
+local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat")
 local WeaponClass = require(Combat:WaitForChild("WeaponClass"))
 local LinkedSword = require(Combat:WaitForChild("Weapons"):WaitForChild("LinkedSword"))
 
@@ -170,11 +170,6 @@ return function(Describe, It, Expect)
 	end)
 
 	Describe("helpers", function()
-		It("Timeline scales by attack speed", function()
-			local T = WeaponClass.Timeline({ Startup = 0.2, Active = 0.1, Recovery = 0.3 }, 2)
-			Expect(T.Startup).ToBeNear(0.1)
-			Expect(T.Total).ToBeNear(0.3)
-		end)
 		It("AnimationId resolves keys and skips placeholders", function()
 			local S = { Animations = { M1 = { "rbxassetid://0", "rbxassetid://123" }, Block = "rbxassetid://9" } }
 			Expect(WeaponClass.AnimationId(S, "M1.2")).ToBe("rbxassetid://123")
