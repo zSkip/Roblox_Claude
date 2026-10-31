@@ -62,10 +62,26 @@ return function(Describe, It, Expect)
 		end)
 
 		It("falls back to spec timings for placeholder animations", function()
-			local Spec = LinkedSword.Schema.Combo.Attacks[1]
+			local Spec = { Animation = "Block", Startup = 0.2, Active = 0.1, Recovery = 0.2 }
 			local T = Timeline.ForAttack(LinkedSword.Schema, Spec, 1)
 			Expect(T.AnimationId).ToBeNil()
 			Expect(T.Startup).ToBeNear(Spec.Startup)
+		end)
+
+		It("scales one attack by Spec.AnimationSpeed", function()
+			local Entry = { Length = 0.9 }
+			local Base = Timeline.Compute({ Recovery = 0.3 }, Entry, 1, Linear)
+			local Fast = Timeline.Compute({ Recovery = 0.3, AnimationSpeed = 1.5 }, Entry, 1, Linear)
+			Expect(Fast.Total).ToBeNear(Base.Total / 1.5)
+			Expect(Fast.WindupSpeed).ToBeNear(1.5)
+		end)
+
+		It("combo M1s reuse the directional clips with a shorter windup", function()
+			local Schema = LinkedSword.Schema
+			local M1 = Timeline.ForAttack(Schema, Schema.Combo.Attacks[1], 1)
+			local Dir = Timeline.ForAttack(Schema, Schema.Directional.Right, 1)
+			Expect(M1.AnimationId).ToBe(Dir.AnimationId)
+			Expect(M1.Startup < Dir.Startup).ToBe(true)
 		end)
 	end)
 end

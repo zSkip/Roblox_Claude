@@ -6,6 +6,7 @@
 --   Windup     = BaseWindup + (AttackTime × WindupPercent − BaseWindup) × WindupModifier
 -- WindupModifier 1 scales the windup like the rest of the swing; below 1 the telegraph shrinks slower, so
 -- fast attackers stay readable. The animation plays its windup frames at WindupSpeed, the rest at ActiveSpeed.
+-- Spec.AnimationSpeed (default 1) multiplies AttackSpeed for one attack, so a clip can be reused faster.
 --
 --   Timeline.ForAttack(Schema, Spec, AttackSpeed) -> Timeline       -- finds the animation's manifest entry
 --   Timeline.Compute(Spec, Entry?, AttackSpeed, Config?) -> Timeline -- pure, Entry = manifest entry
@@ -51,7 +52,7 @@ end
 function Timeline.Compute(Spec : { [string]: any }, Entry : Entry?, AttackSpeed : number?, Config : Config?) : Timeline
 	local Cfg = Config or Timeline.DefaultConfig
 	local W, A, R = Timeline.Base(Spec, Entry, Cfg)
-	local Speed = math.max(AttackSpeed or 1, 0.05)
+	local Speed = math.max((AttackSpeed or 1) * (Spec.AnimationSpeed or 1), 0.05)
 	local BaseTime = W + A + R
 	local AttackTime = BaseTime / Speed
 	local Windup = W

@@ -1,9 +1,14 @@
 --!strict
--- Builds and attaches a weapon model with a Motor6D (no Tool class anywhere).
+-- Builds and attaches a weapon model with Motor6Ds (no Tool class anywhere), after Nilociety's Tool6D.
 -- Uses Schema.Model (a Model with a "Handle" part) if present, else builds one from Schema.ModelSpec.
--- The client animates the "WeaponGrip" Motor6D's C0 for procedural swings while animations are placeholders.
+-- Schema.Motors lists the links, one Motor6D each, so animations can pose every weapon part:
+--   Motors = { { Part = "Handle", Body = "Right Arm", C0 = GripC0 }, { Part = "Scabbard", Body = "Left Arm" } }
+-- Motors live in Weapon/Motors as "Link_<i>" (Part0 = body part, Part1 = weapon part, C0/C1 default identity).
+-- The client tweens the Handle motor's C0 for procedural swings while animations are placeholders.
 
 local WeaponModel = {}
+
+export type Link = { Part : string, Body : string, C0 : CFrame?, C1 : CFrame? }
 
 -- handle +Y points forward (-Z of the arm) from the bottom of the R6 arm
 WeaponModel.GripC0 = CFrame.new(0, -1, 0) * CFrame.Angles(-math.pi / 2, 0, 0)
@@ -63,9 +68,12 @@ local function Build(Schema : { [string]: any }) : Model
 	return Model
 end
 
-local function FindGripPart(Character : Model, Preferred : string?) : BasePart?
-	for _, Name in { Preferred or "Right Arm", "Right Arm", "RightHand" } do
-		local P = Character:FindFirstChild(Name)
+-- R15 names for the R6 limbs a link may ask for
+local R15Fallback = { ["Right Arm"] = "RightHand", ["Left Arm"] = "LeftHand", ["Torso"] = "UpperTorso" }
+
+local function FindBodyPart(Character : Model, Name : string) : BasePart?
+	for _, Candidate in { Name, R15Fallback[Name] } do
+		local P = Character:FindFirstChild(Candidate)
 		if P and P:IsA("BasePart") then
 			return P
 		end
@@ -73,29 +81,98 @@ local function FindGripPart(Character : Model, Preferred : string?) : BasePart?
 	return nil
 end
 
--- returns the weapon model (named "Weapon") or nil if the rig has no grip part
-function WeaponModel.Attach(Character : Model, Schema : { [string]: any }) : Model?
-	local Existing = Character:FindFirstChild("Weapon")
-	if Existing then
-		Existing:Destroy()
+-- Schema.Motors, else the legacy ModelSpec.Grip as a single Handle link
+local function Links(Schema : { [string]: any }) : { Link }
+	if Schema.Motors then
+		return Schema.Motors
 	end
-	local Grip = FindGripPart(Character, Schema.ModelSpec and Schema.ModelSpec.Grip)
-	if not Grip then
-		warn(`[WeaponModel] {Character.Name} has no Right Arm; is the place set to R6?`)
+	local Grip = Schema.ModelSpec and Schema.ModelSpec.Grip or "Right Arm"
+	return { { Part = "Handle", Body = Grip, C0 = WeaponModel.GripC0 } }
+end
+
+-- clears Part0 / Part1 before destroying so the joint can't snap parts on the way out
+local function ClearMotors(Model : Model)
+	local Folder = Model:FindFirstChild("Motors")
+	if not Folder then
+		return
+	end
+	for _, Motor in Folder:GetChildren() do
+		if Motor:IsA("Motor6D") then
+			Motor.Part1 = nil
+			Motor.Part0 = nil
+			Motor:Destroy()
+		end
+	end
+end
+
+-- the Motor6D driving a weapon part ("Handle" by default), for procedural C0 tweens
+function WeaponModel.GetMotor(Character : Model, PartName : string?) : Motor6D?
+	local Model = Character:FindFirstChild("Weapon")
+	local Folder = Model and Model:FindFirstChild("Motors")
+	if not Folder then
 		return nil
 	end
+	local Wanted = PartName or "Handle"
+	for _, Motor in Folder:GetChildren() do
+		if Motor:IsA("Motor6D") and Motor.Part1 and Motor.Part1.Name == Wanted then
+			return Motor
+		end
+	end
+	return nil
+end
+
+function WeaponModel.Detach(Character : Model)
+	local Model = Character:FindFirstChild("Weapon")
+	if Model and Model:IsA("Model") then
+		ClearMotors(Model)
+		Model:Destroy()
+	end
+end
+
+-- returns the weapon model (named "Weapon") or nil if the rig lacks a linked body part
+function WeaponModel.Attach(Character : Model, Schema : { [string]: any }) : Model?
+	WeaponModel.Detach(Character)
+
+	-- a Tool's RightGrip weld fights the Motor6D on the same arm
+	for _, Arm in { "Right Arm", "RightHand" } do
+		local Part = Character:FindFirstChild(Arm)
+		local Grip = Part and Part:FindFirstChild("RightGrip")
+		if Grip then
+			Grip:Destroy()
+		end
+	end
+
 	local Model = Build(Schema)
 	Model.Name = "Weapon"
-	local Handle = Model:FindFirstChild("Handle") :: BasePart
-	assert(Handle, "weapon model needs a part named Handle")
+	local Folder = Instance.new("Folder")
+	Folder.Name = "Motors"
+	Folder.Parent = Model
 
-	local Motor = Instance.new("Motor6D")
-	Motor.Name = "WeaponGrip"
-	Motor.Part0 = Grip
-	Motor.Part1 = Handle
-	Motor.C0 = if Grip.Name == "RightHand" then CFrame.Angles(-math.pi / 2, 0, 0) else WeaponModel.GripC0
-	Motor.Parent = Grip
+	for Index, Link in Links(Schema) do
+		local Part = Model:FindFirstChild(Link.Part, true)
+		if not (Part and Part:IsA("BasePart")) then
+			Model:Destroy()
+			error(`[WeaponModel] {Schema.Id}: weapon part "{Link.Part}" (Motors[{Index}]) doesn't exist in the model`, 0)
+		end
+		local Body = FindBodyPart(Character, Link.Body)
+		if not Body then
+			Model:Destroy()
+			warn(`[WeaponModel] {Character.Name} has no "{Link.Body}" (Motors[{Index}]); is the place set to R6?`)
+			return nil
+		end
+		local Motor = Instance.new("Motor6D")
+		Motor.Name = `Link_{Index}`
+		Motor.Part0 = Body
+		Motor.Part1 = Part
+		Motor.C0 = Link.C0 or CFrame.identity
+		Motor.C1 = Link.C1 or CFrame.identity
+		Motor.Parent = Folder
+	end
 
+	-- removed some other way (respawn, Destroy on the model): drop the joints with it
+	Model.Destroying:Connect(function()
+		ClearMotors(Model)
+	end)
 	Model.Parent = Character
 	return Model
 end

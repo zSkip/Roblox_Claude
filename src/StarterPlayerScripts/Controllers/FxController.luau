@@ -62,9 +62,8 @@ local Swings : { [string]: { CFrame } } = {
 }
 
 local function TweenGrip(Model : Model, Target : CFrame, Duration : number)
-	local Arm = Model:FindFirstChild("Right Arm")
-	local Motor = Arm and Arm:FindFirstChild("WeaponGrip")
-	if Motor and Motor:IsA("Motor6D") then
+	local Motor = WeaponModel.GetMotor(Model, "Handle")
+	if Motor then
 		TweenService:Create(Motor, TweenInfo.new(math.max(Duration, 0.03), Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { C0 = Target }):Play()
 	end
 end

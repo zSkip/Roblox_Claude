@@ -1,10 +1,12 @@
 --!strict
 -- LinkedSword: the first weapon definition (plan §4). Pure data + builder sugar; no side-specific code.
 -- Animations: the directional M1s and dodges use ReplicatedStorage.Assets.Animations (60 fps, frame data
--- from the baked AnimationManifest). The rest are placeholders (rbxassetid://0): those fall back to
--- procedural weapon swings and the spec's Startup / Active / Recovery.
+-- from the baked AnimationManifest). Combo M1s reuse the directional hit animations (matched by swing
+-- side) at AnimationSpeed > 1, so they stay faster than the directionals (G9). The rest are placeholders
+-- (rbxassetid://0): those fall back to procedural weapon swings and the spec's Startup / Active / Recovery.
 
 local WeaponClass = require(script.Parent.Parent.WeaponClass)
+local WeaponModel = require(script.Parent.Parent.WeaponModel)
 
 local Box = Vector3.new(5, 5, 6)
 local Ahead = CFrame.new(0, 0, -3.5)
@@ -12,9 +14,15 @@ local Ahead = CFrame.new(0, 0, -3.5)
 local LinkedSword = WeaponClass.Define({
 	Id = "LinkedSword",
 
+	-- weapon part -> body part links (Combat/WeaponModel). Each becomes a Motor6D the animations can drive;
+	-- add { Part = "Scabbard", Body = "Left Arm" } once the model has one. C0 must match the rig the
+	-- weapon animations were authored on (identity for a Tool6D-style rig).
+	Motors = {
+		{ Part = "Handle", Body = "Right Arm", C0 = WeaponModel.GripC0 },
+	},
+
 	-- no model asset yet: Combat/WeaponModel builds one from this description
 	ModelSpec = {
-		Grip = "Right Arm",
 		HandleSize = Vector3.new(0.3, 1.1, 0.3),
 		BladeSize = Vector3.new(0.2, 3.6, 0.55),
 		HandleColor = Color3.fromRGB(90, 60, 40),
@@ -36,7 +44,6 @@ local LinkedSword = WeaponClass.Define({
 
 	Animations = {
 		Idle = "rbxassetid://0",
-		M1 = { "rbxassetid://0", "rbxassetid://0", "rbxassetid://0", "rbxassetid://0" },
 		-- W/A/S/D + M1
 		Directional = {
 			Front = "rbxassetid://77985045543593", -- W_Hit
@@ -65,12 +72,13 @@ local LinkedSword = WeaponClass.Define({
 
 	Combo = {
 		ResetTime = 1.1,
+		-- same clips as the directionals; AnimationSpeed + WindupModifier 1 keep the windup shorter than theirs
 		Attacks = {
-			{ Animation = "M1.1", Swing = "Right", Startup = 0.18, Active = 0.12, Recovery = 0.22, Hitstun = 0.35, PostureDamage = 10, Hitbox = { Size = Box, Offset = Ahead } },
-			{ Animation = "M1.2", Swing = "Left", Startup = 0.18, Active = 0.12, Recovery = 0.22, Hitstun = 0.35, PostureDamage = 10, Hitbox = { Size = Box, Offset = Ahead } },
-			{ Animation = "M1.3", Swing = "Right", Startup = 0.18, Active = 0.12, Recovery = 0.22, Hitstun = 0.35, PostureDamage = 10, Hitbox = { Size = Box, Offset = Ahead } },
+			{ Animation = "Directional.Right", AnimationSpeed = 1.5, WindupModifier = 1, Swing = "Right", Startup = 0.18, Active = 0.12, Recovery = 0.22, Hitstun = 0.35, PostureDamage = 10, Hitbox = { Size = Box, Offset = Ahead } },
+			{ Animation = "Directional.Left", AnimationSpeed = 1.5, WindupModifier = 1, Swing = "Left", Startup = 0.18, Active = 0.12, Recovery = 0.22, Hitstun = 0.35, PostureDamage = 10, Hitbox = { Size = Box, Offset = Ahead } },
+			{ Animation = "Directional.Right", AnimationSpeed = 1.5, WindupModifier = 1, Swing = "Right", Startup = 0.18, Active = 0.12, Recovery = 0.22, Hitstun = 0.35, PostureDamage = 10, Hitbox = { Size = Box, Offset = Ahead } },
 			{
-				Animation = "M1.4", Swing = "Front", Startup = 0.25, Active = 0.14, Recovery = 0.55, Hitstun = 0.6, PostureDamage = 35,
+				Animation = "Directional.Front", AnimationSpeed = 1.25, WindupModifier = 1, Swing = "Front", Startup = 0.25, Active = 0.14, Recovery = 0.55, Hitstun = 0.6, PostureDamage = 35,
 				Damage = { Type = "Physical", Amount = 12 },
 				Knockback = { Speed = 55, Up = 18, Duration = 0.2 },
 				Tags = { Finisher = true },

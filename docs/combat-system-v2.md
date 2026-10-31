@@ -68,13 +68,14 @@ Windup     = BaseWindup + (AttackTime × WindupPercent − BaseWindup) × Windup
 
 ## 2. Known gaps / needs you
 - **Avatar type must be R6.** The test place currently spawns R15 avatars (`TimeForBeastMode is not R6`), so the R6 animations won't pose correctly on players until **Game Settings → Avatar → R6** is set. NPC dummies are already R6.
-- **Missing animations:** combo M1s, block and parry have no animations yet. They use spec timings and the procedural swing.
+- **Missing animations:** block and parry have no animations yet. They use spec timings and the procedural swing. Combo M1s reuse the directional hit clips (M1.1/M1.3 = D_Hit, M1.2 = A_Hit, M1.4 = W_Hit) at `AnimationSpeed` 1.5 / 1.25 with `WindupModifier = 1`, so their windup stays shorter than the directionals'.
+- **Weapon Motor6Ds** follow the Tool6D pattern (`skills/roblox.animation.motor6d-weapon-rigging.skill.md`): `Schema.Motors` links, `Weapon/Motors/Link_<i>`, RightGrip removed, cleared on detach/destroy.
 - **Directional spec timings are only a fallback now.** The schema's `Startup` / `Active` numbers for directionals are ignored while the animations exist (the animation is the source of truth). `Recovery` is still used.
 - **Shift-lock interplay** with the `CombatTurn` AlignOrientation has only been checked without shift-lock. Try a windup with shift-lock on.
 - **Studio is pushed from git by hand.** Rojo isn't installed and the place has HTTP requests disabled. Changes were made in Studio through MCP and mirrored into `src/`, and both were checked for byte parity.
 
 ## 3. Next (from the V2 plan)
-1. **StatusEffects system** (EffectService + `Shared/StatusEffects`):
+1. **StatusEffects system** (EffectService + `Shared/StatusEffects`), designed in `docs/status-effect-system.md`:
    - CC types: Stun, Root, Slow, Cripple (cuts AS), Disarm, Silence, Airborne/Knockup, Knockback.
    - Tenacity with LoL's 0.3 s minimum.
    - Stunned and GuardBroken migrate onto it, and each effect maps to a lock tier.

@@ -4,6 +4,7 @@ Planning docs and reference skills for an OOP, schema-driven, reaction-based com
 It uses **ProfileStore** for data, **GoodSignal** for events and **Packet** for networking.
 
 - **V2 (current iteration):** [`docs/combat-system-v2.md`](docs/combat-system-v2.md) covers single-script architecture, animations and frame data, LoL attack speed, the tiered animation lock and what's next.
+- **Status effects (design):** [`docs/status-effect-system.md`](docs/status-effect-system.md) covers effect definitions, StatusController, the starting effect set, how stuns and Exhausted migrate onto it, networking, tests and the rollout order.
 - **Plan:** [`docs/combat-system-plan.md`](docs/combat-system-plan.md). It covers the architecture, the review of the current code, the schema, a WeaponClass sketch, combat rules, packets, milestones, open questions and improvement ideas.
 
 ## Skills
@@ -76,6 +77,7 @@ Each file starts with YAML front-matter (`name`, `description`) so an agent can 
 | | [`roblox.scheduler.task-runservice-signals`](skills/roblox.scheduler.task-runservice-signals.skill.md) | task library, RunService frame order, RBXScriptSignal, deferred events, clocks, timing patterns |
 | | [`roblox.input.userinput-contextaction`](skills/roblox.input.userinput-contextaction.skill.md) | UserInputService, InputObject, input enums, ContextActionService, Input Action System, tap/hold, direction buffer |
 | | [`roblox.animation.animator-tracks`](skills/roblox.animation.animator-tracks.skill.md) | Animator, AnimationTrack, priorities, preloading, Length gotcha, replication, combat patterns |
+| | [`roblox.animation.motor6d-weapon-rigging`](skills/roblox.animation.motor6d-weapon-rigging.skill.md) | Tool6D pattern: config part→limb Motor6D links, RightGrip removal, C0/C1 vs authoring rig, cleanup paths, toolless `WeaponModel`, rigging animations, troubleshooting |
 | | [`roblox.character.humanoid-players`](skills/roblox.character.humanoid-players.skill.md) | Players/Player, character lifecycle, Humanoid API, HumanoidStateType, damage, movement modifiers, rigs |
 | | [`roblox.spatial.raycast-overlap-hitbox`](skills/roblox.spatial.raycast-overlap-hitbox.skill.md) | Raycast/shapecasts, overlap queries, params, collision groups, hitbox recipes, server validation |
 | | [`roblox.physics.movers-knockback`](skills/roblox.physics.movers-knockback.skill.md) | impulses, network ownership, LinearVelocity/Align*, knockback, dash, ragdoll |
