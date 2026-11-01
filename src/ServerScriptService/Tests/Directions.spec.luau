@@ -1,0 +1,42 @@
+local Directions = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat"):WaitForChild("Directions"))
+
+return function(Describe, It, Expect)
+	Describe("IncomingSide", function()
+		local Defender = CFrame.new() -- at origin, facing -Z
+
+		It("detects an attacker in front", function()
+			Expect(Directions.IncomingSide(Defender, Vector3.new(0, 0, -5))).ToBe("Front")
+		end)
+		It("detects an attacker behind", function()
+			Expect(Directions.IncomingSide(Defender, Vector3.new(0, 0, 5))).ToBe("Back")
+		end)
+		It("detects left and right", function()
+			Expect(Directions.IncomingSide(Defender, Vector3.new(-5, 0, 0))).ToBe("Left")
+			Expect(Directions.IncomingSide(Defender, Vector3.new(5, 0, 0))).ToBe("Right")
+		end)
+		It("respects defender rotation", function()
+			local Turned = CFrame.Angles(0, math.rad(90), 0) -- now facing -X
+			Expect(Directions.IncomingSide(Turned, Vector3.new(-5, 0, 0))).ToBe("Front")
+		end)
+	end)
+
+	Describe("Matches", function()
+		It("Mirrored: parry the side the attack comes from", function()
+			-- attacker presses D (Right); it lands on the defender's Left
+			local Incoming = Directions.LandingSide("Right")
+			Expect(Incoming).ToBe("Left")
+			Expect(Directions.Matches("Mirrored", "Right", Incoming, "Left")).ToBe(true)
+			Expect(Directions.Matches("Mirrored", "Right", Incoming, "Right")).ToBe(false)
+		end)
+		It("Same: parry with the attacker's key", function()
+			Expect(Directions.Matches("Same", "Right", "Left", "Right")).ToBe(true)
+		end)
+		It("Away: counter-dodge away from the incoming side", function()
+			Expect(Directions.Matches("Away", "Right", "Left", "Right")).ToBe(true)
+			Expect(Directions.Matches("Away", nil, "Front", "Back")).ToBe(true)
+		end)
+		It("no chosen direction never matches", function()
+			Expect(Directions.Matches("Mirrored", "Right", "Left", nil)).ToBe(false)
+		end)
+	end)
+end

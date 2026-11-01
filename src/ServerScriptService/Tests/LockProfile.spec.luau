@@ -1,0 +1,72 @@
+local Combat = game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Combat")
+local LockProfile = require(Combat:WaitForChild("LockProfile"))
+
+local Cfg = { WindupMoveExponent = 1, WindupTurnEnd = 0.35, ActiveTurn = 0, RecoveryTurn = 0.25, RecoveryReleaseAt = 0.5 }
+local T = { Startup = 0.6, Active = 0.2, Recovery = 0.4 }
+local Tiers = LockProfile.Tiers
+
+return function(Describe, It, Expect)
+	Describe("LockProfile", function()
+		It("leaves Idle free and locks stuns", function()
+			Expect(LockProfile.Sample("Idle", 0, nil, Cfg).Tier).ToBe(Tiers.Free)
+			local S = LockProfile.Sample("Stunned", 0, nil, Cfg)
+			Expect(S.Tier).ToBe(Tiers.Locked)
+			Expect(S.Move).ToBe(0)
+		end)
+
+		It("effect locks merge with the state sample", function()
+			local Idle = LockProfile.Sample("Idle", 0, nil, Cfg)
+			Expect(LockProfile.Combine(Idle, Tiers.Free)).ToBe(Idle)
+			local Rooted = LockProfile.Combine(Idle, Tiers.Rooted)
+			Expect(Rooted.Tier).ToBe(Tiers.Rooted)
+			Expect(Rooted.Move).ToBe(0)
+			Expect(Rooted.Turn).ToBe(1)
+			Expect(Rooted.Jump).ToBe(false)
+			local Windup = LockProfile.Combine(LockProfile.Sample("Attacking", 0.3, T, Cfg), Tiers.Forced)
+			Expect(Windup.Tier).ToBe(Tiers.Forced)
+			Expect(Windup.Turn).ToBe(0)
+		end)
+
+		It("eases movement to stillness over the windup while still steering", function()
+			local Start = LockProfile.Sample("Attacking", 0, T, Cfg)
+			Expect(Start.Tier).ToBe(Tiers.Steer)
+			Expect(Start.Move).ToBeNear(1)
+			local Mid = LockProfile.Sample("Attacking", 0.3, T, Cfg)
+			Expect(Mid.Move).ToBeNear(0.5)
+			Expect(Mid.Turn).ToBeNear(0.675)
+			Expect(LockProfile.Sample("Attacking", 0.599, T, Cfg).Move < 0.01).ToBe(true)
+		end)
+
+		It("roots during the hit frames and ramps back late in recovery", function()
+			local Hit = LockProfile.Sample("Attacking", 0.7, T, Cfg)
+			Expect(Hit.Tier).ToBe(Tiers.Rooted)
+			Expect(Hit.Move).ToBe(0)
+			Expect(LockProfile.Sample("Attacking", 0.9, T, Cfg).Move).ToBe(0)
+			Expect(LockProfile.Sample("Attacking", 1.1, T, Cfg).Move).ToBeNear(0.5)
+			Expect(LockProfile.Sample("Attacking", 1.2, T, Cfg).Move).ToBeNear(1)
+		end)
+
+		It("hands control back early when RecoveryReleaseEnd is below 1", function()
+			local Early = table.clone(Cfg)
+			Early.RecoveryReleaseAt = 0
+			Early.RecoveryReleaseEnd = 0.5
+			local Mid = LockProfile.Sample("Attacking", 0.9, T, Early) -- a quarter into recovery
+			Expect(Mid.Tier).ToBe(Tiers.Rooted)
+			Expect(Mid.Move).ToBeNear(0.5)
+			Expect(Mid.Turn).ToBeNear(0.625)
+			local Done = LockProfile.Sample("Attacking", 1.01, T, Early)
+			Expect(Done.Tier).ToBe(Tiers.Free)
+			Expect(Done.Move).ToBe(1)
+			Expect(Done.Jump).ToBe(false)
+			-- ramp of 0.2 s averages half speed, then full speed for the last 0.2 s
+			Expect(LockProfile.MaxTravel(T, 1.2, 10, Early)).ToBeNear(6)
+		end)
+
+		It("integrates the curve for the server's travel check", function()
+			Expect(LockProfile.MaxTravel(T, 0.3, 10, Cfg)).ToBeNear(2.25)
+			Expect(LockProfile.MaxTravel(T, 0.6, 10, Cfg)).ToBeNear(3)
+			Expect(LockProfile.MaxTravel(T, 0.8, 10, Cfg)).ToBeNear(3)
+			Expect(LockProfile.MaxTravel(T, 1.2, 10, Cfg)).ToBeNear(4)
+		end)
+	end)
+end
