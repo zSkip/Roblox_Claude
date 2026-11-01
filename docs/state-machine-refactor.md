@@ -159,4 +159,4 @@ Input (parallel)
 1. ~~Client prediction for `Attack`/`Dodge`?~~ **Decided: yes.** Actions are client-initiated timelines with reject → rollback (`docs/replication-and-validation.md` §6, §11).
 2. Should `Blocking` → `Attacking` (attack out of block) stay allowed? Today it's not: `Allowed.Attack = { Idle }`. The chart above includes it as an option to decide.
 3. Saved keybinds: per weapon, or global with weapon overrides?
-4. NPC AI (`DummyService`): do dummies get a separate `AiChart` that sends the same events as players (recommended: the same combat path for PvE and PvP), or a RobloxStateMachine-style polled machine?
+4. NPC AI (`NpcService`): do dummies get a separate `AiChart` that sends the same events as players (recommended: the same combat path for PvE and PvP), or a RobloxStateMachine-style polled machine?

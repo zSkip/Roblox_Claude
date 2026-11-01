@@ -14,6 +14,7 @@ local Exhaustion = require(Combat.Exhaustion)
 local Stats = require(Combat.Stats)
 local Movement = require(Combat.Movement)
 local LockProfile = require(Combat.LockProfile)
+local ClaimRules = require(Combat.ClaimRules)
 local CombatEnums = require(Combat.CombatEnums)
 local Config = require(Combat.CombatConfig)
 local CombatNet = require(Combat.CombatNet)
@@ -159,11 +160,6 @@ end
 
 ---------------------------------------------------------------- client claims
 
-local function HitboxReach(Hitbox : any) : number
-	local Offset = if Hitbox.Offset then Hitbox.Offset.Position.Magnitude else 0
-	return Offset + Hitbox.Size.Magnitude / 2
-end
-
 -- the attacker may only have moved as far as the windup's movement curve allows (plus latency slack)
 local function Slid(A : any, Attack : any, Now : number) : (boolean, number, number)
 	if not Attack.StartPosition or not Attack.Timeline then
@@ -174,38 +170,43 @@ local function Slid(A : any, Attack : any, Now : number) : (boolean, number, num
 	return Moved > Allowed, Moved, Allowed
 end
 
--- client claim → hard checks → resolve. Lag compensation / witnesses come in milestone M5.
-function HitService.Claim(Player : Player, NetId : number, Target : Instance?)
+-- client claim → hard checks → resolve; returns why a claim was dropped (nil = resolved). Lag
+-- compensation / witnesses come in milestone M5.
+function HitService.Claim(Player : Player, NetId : number, Target : Instance?) : string?
 	local Character = Player.Character
 	local A = Character and CombatService.Combatants[Character]
 	if not A or not A.Attack or not CombatService.Alive(A) then
-		return
+		return "NoAttack"
 	end
 	local Attack = A.Attack
 	if Attack.NetId ~= NetId or not Attack.Def.Spec.Hitbox then
-		return
+		return "WrongAction"
 	end
 	local Now = Clock()
-	if Now < Attack.ActiveStart - Config.ClaimTimeSlack or Now > Attack.ActiveEnd + Config.ClaimTimeSlack then
-		return
+	if not ClaimRules.InWindow(Now, Attack.ActiveStart, Attack.ActiveEnd, Config) then
+		return "OutsideWindow"
 	end
 	if typeof(Target) ~= "Instance" or not (Target :: Instance):IsA("Model") then
-		return
+		return "BadTarget"
 	end
 	local D = CombatService.Combatants[Target :: Model]
 	if not D or D == A then
-		return
+		return "BadTarget"
 	end
-	local Reach = HitboxReach(Attack.Def.Spec.Hitbox) + Config.ClaimRangeSlack
-	if (D.Root.Position - A.Root.Position).Magnitude > Reach then
-		return
+	local OutOfReach = ClaimRules.Reach(A.Root.CFrame, Attack.Def.Spec.Hitbox, D.Root.Position, Config)
+	if OutOfReach then
+		return OutOfReach
 	end
 	local IsSlide, Moved, Allowed = Slid(A, Attack, Now)
 	if IsSlide then
 		warn(`[Combat] {Player.Name} moved {string.format("%.1f", Moved)} studs during an attack windup (allowed {string.format("%.1f", Allowed)}); claim rejected`)
-		return
+		return "Slide"
+	end
+	if Attack.Hit[D.Model] then
+		return "Duplicate"
 	end
 	HitService.ResolveHit(A, D, Attack)
+	return nil
 end
 
 return HitService

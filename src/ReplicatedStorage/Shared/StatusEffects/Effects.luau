@@ -12,6 +12,7 @@ local EffectTags = require(script.Parent.EffectTags)
 export type Action = "Move" | "Rotate" | "Jump" | "Attack" | "Defend" | "Dodge" | "Ability"
 export type StackMode = "Refresh" | "Extend" | "Independent" | "Intensity" | "Ignore"
 export type ModSpec = { Stat : string, Kind : Stats.ModKind, Value : number }
+export type ForcedMove = { Mode : "Toward" | "Away", Speed : number, StopAt : number? }
 
 export type EffectDef = {
 	Id : string,
@@ -28,6 +29,7 @@ export type EffectDef = {
 	Tick : { Interval : number, Damage : number?, DamageType : Stats.DamageType?, Heal : number? }?,
 	BreaksOnDamage : boolean?,
 	MinDuration : number?, -- floor after Tenacity (default CombatConfig.Status.MinCCDuration)
+	ForcedMove : ForcedMove?, -- the server walks the target relative to the effect's Source (a combatant)
 	Hooks : { OnApply : ((any) -> ())?, OnRemove : ((any) -> ())?, OnTick : ((any) -> ())? }?, -- server only
 }
 
@@ -100,6 +102,15 @@ function Effects.Validate(List : { EffectDef })
 		if Def.Tick and (type(Def.Tick.Interval) ~= "number" or Def.Tick.Interval <= 0) then
 			Fail(Id, "Tick.Interval must be a number > 0")
 		end
+		if Def.ForcedMove then
+			local Mode = Def.ForcedMove.Mode
+			if Mode ~= "Toward" and Mode ~= "Away" then
+				Fail(Id, `unknown ForcedMove.Mode {tostring(Mode)}`)
+			end
+			if type(Def.ForcedMove.Speed) ~= "number" or Def.ForcedMove.Speed <= 0 then
+				Fail(Id, "ForcedMove.Speed must be a number > 0")
+			end
+		end
 	end
 end
 
@@ -140,6 +151,13 @@ Effects.List = {
 		Duration = 0.4, StackMode = "Ignore" },
 	{ Id = "DodgeIFrames", NetId = 13, Kind = "Buff", Tags = { Invulnerable = true },
 		Duration = Config.PerfectDodgeIFrames, StackMode = "Refresh" },
+	-- these two need a caster: EffectService ends them if the Source dies
+	{ Id = "Charmed", NetId = 14, Kind = "CC", Tags = { Charm = true, TenacityAffected = true, Cleansable = true },
+		Duration = 2.5, StackMode = "Refresh", Blocks = All, Lock = Tiers.Forced,
+		ForcedMove = { Mode = "Toward", Speed = 8, StopAt = 4 } },
+	{ Id = "Feared", NetId = 15, Kind = "CC", Tags = { Fear = true, TenacityAffected = true, Cleansable = true },
+		Duration = 2, StackMode = "Refresh", Blocks = All, Lock = Tiers.Forced,
+		ForcedMove = { Mode = "Away", Speed = 12 } },
 } :: { EffectDef }
 
 Effects.Validate(Effects.List)

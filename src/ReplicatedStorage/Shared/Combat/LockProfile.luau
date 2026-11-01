@@ -4,8 +4,8 @@
 --   Free   0  everything                                         Idle
 --   Steer  1  movement eases to stillness over the windup,       attack windup, block, parry
 --             turning narrows
---   Rooted 2  no movement, limited turning; movement ramps back  hit frames, recovery, dodges
---             near the end of recovery
+--   Rooted 2  no movement, limited turning; movement and turning hit frames, recovery, dodges
+--             ramp back during recovery, then Free until Idle
 --   Locked 3  nothing                                            stun, guard break, death
 --   Forced 4  physics / the server drives the root (reserved)    knockback, airborne
 -- Pure: the owner client applies a Sample every frame; the server integrates the same curve
@@ -18,6 +18,7 @@ export type Config = {
 	ActiveTurn : number,
 	RecoveryTurn : number,
 	RecoveryReleaseAt : number,
+	RecoveryReleaseEnd : number?, -- share of recovery where control is fully back (default 1)
 }
 
 local LockProfile = {}
@@ -63,11 +64,16 @@ function LockProfile.Combine(S : Sample, EffectTier : number) : Sample
 	}
 end
 
-local function Release(Beta : number, At : number) : number
-	if At >= 1 then
-		return if Beta >= 1 then 1 else 0
+local function ReleaseSpan(Config : Config) : (number, number)
+	local At = math.min(Config.RecoveryReleaseAt, 1)
+	return At, math.clamp(Config.RecoveryReleaseEnd or 1, At, 1)
+end
+
+local function Release(Beta : number, At : number, End : number) : number
+	if At >= End then
+		return if Beta >= End then 1 else 0
 	end
-	return math.clamp((Beta - At) / (1 - At), 0, 1)
+	return math.clamp((Beta - At) / (End - At), 0, 1)
 end
 
 function LockProfile.Sample(State : string, Elapsed : number, Timeline : any?, Config : Config) : Sample
@@ -89,7 +95,11 @@ function LockProfile.Sample(State : string, Elapsed : number, Timeline : any?, C
 		return { Tier = Tiers.Rooted, Move = 0, Turn = Config.ActiveTurn, Jump = false }
 	end
 	local Beta = if Timeline.Recovery > 0 then math.clamp((Elapsed - RecoveryStart) / Timeline.Recovery, 0, 1) else 1
-	return { Tier = Tiers.Rooted, Move = Release(Beta, Config.RecoveryReleaseAt), Turn = Config.RecoveryTurn, Jump = false }
+	local Move = Release(Beta, ReleaseSpan(Config))
+	if Move >= 1 then
+		return { Tier = Tiers.Free, Move = 1, Turn = 1, Jump = false } -- the server allows jumps again at Idle
+	end
+	return { Tier = Tiers.Rooted, Move = Move, Turn = Config.RecoveryTurn + (1 - Config.RecoveryTurn) * Move, Jump = false }
 end
 
 -- farthest horizontal distance the curve allows from the attack's start until Elapsed, at walk speed Cap
@@ -102,13 +112,14 @@ function LockProfile.MaxTravel(Timeline : any, Elapsed : number, Cap : number, C
 		local Alpha = math.clamp(Elapsed / Windup, 0, 1)
 		Distance += Windup * (1 - (1 - Alpha) ^ (K + 1)) / (K + 1)
 	end
-	local At = math.min(Config.RecoveryReleaseAt, 1)
-	local Span = Timeline.Recovery * (1 - At)
+	local At, End = ReleaseSpan(Config)
+	local Span = Timeline.Recovery * (End - At)
 	local RampStart = Windup + Timeline.Active + Timeline.Recovery * At
 	if Span > 0 and Elapsed > RampStart then
 		local U = math.clamp((Elapsed - RampStart) / Span, 0, 1)
 		Distance += Span * U * U / 2
 	end
+	Distance += math.max(0, Elapsed - (RampStart + Span)) -- full speed for the rest of recovery
 	return Distance * Cap
 end
 

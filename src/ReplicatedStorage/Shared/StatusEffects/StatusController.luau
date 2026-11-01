@@ -14,7 +14,7 @@ local LockProfile = require(Combat.LockProfile)
 local Config = require(Combat.CombatConfig)
 local Effects = require(script.Parent.Effects)
 
-export type Reason = "Expired" | "Cleansed" | "Damage" | "Replaced" | "Consumed" | "Intensity"
+export type Reason = "Expired" | "Cleansed" | "Damage" | "Replaced" | "Consumed" | "Intensity" | "SourceLost"
 export type Overrides = { Duration : number?, Stacks : number?, Modifiers : { Effects.ModSpec }?, Potency : number? }
 
 export type Instance = {
@@ -172,6 +172,17 @@ local function DropWhere(self : any, Keep : (Instance) -> boolean, Reason : Reas
 end
 
 -- removes every instance of Id (all of them for Independent effects); true if any was active
+-- the newest active effect that forces movement, if any
+function StatusController.ForcedMove(self : any) : Instance?
+	local Newest : Instance? = nil
+	for _, Inst in self.Active do
+		if Inst.Def.ForcedMove and (not Newest or Inst.StartedAt > Newest.StartedAt) then
+			Newest = Inst
+		end
+	end
+	return Newest
+end
+
 function StatusController.Remove(self : any, Id : string, Reason : Reason?) : boolean
 	return DropWhere(self, function(Inst)
 		return Inst.Def.Id ~= Id

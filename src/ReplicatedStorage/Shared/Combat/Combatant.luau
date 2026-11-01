@@ -62,6 +62,7 @@ function Combatant.new(Args : Args)
 
 		Stats = Block,
 		Status = StatusController.new(Block),
+		Forced = nil :: any, -- EffectService's state while an effect walks this combatant
 
 		MaxPosture = S.MaxPosture,
 		Posture = S.MaxPosture,

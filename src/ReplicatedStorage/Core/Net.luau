@@ -133,9 +133,35 @@ local function Unpack(Ch : any, Args : any) : (boolean, { any }?)
 	return true, Out
 end
 
+-- Studio-only debug mirror of dropped client traffic (Net_<Reason> attributes on the Player)
+local IS_STUDIO = RunService:IsStudio()
+local function Dropped(Player : Player?, Reason : string)
+	if IS_STUDIO and Player then
+		local Key = `Net_{Reason}`
+		Player:SetAttribute(Key, ((Player:GetAttribute(Key) :: number?) or 0) + 1)
+	end
+end
+
+-- flood guard on client → server traffic: a plain array of at most 64 messages. Counts by walking the
+-- table, because # ignores string keys and a forged batch could hide any number of messages behind them.
+local function ValidClientBatch(Batch : any) : boolean
+	if type(Batch) ~= "table" then
+		return false
+	end
+	local Count = 0
+	for Key in Batch do
+		Count += 1
+		if Count > 64 or type(Key) ~= "number" then
+			return false
+		end
+	end
+	return true
+end
+
 local function Deliver(Batch : any, Player : Player?)
-	if type(Batch) ~= "table" or (Player ~= nil and #Batch > 64) then
-		return -- crude flood guard on client → server traffic
+	if type(Batch) ~= "table" or (Player ~= nil and not ValidClientBatch(Batch)) then
+		Dropped(Player, "BadBatch")
+		return
 	end
 	for _, Msg in Batch do
 		local Ch = type(Msg) == "table" and type(Msg.c) == "number" and ById[Msg.c]
@@ -148,7 +174,11 @@ local function Deliver(Batch : any, Player : Player?)
 				else
 					Ch._signal:Fire(table.unpack(A, 1, N))
 				end
+			else
+				Dropped(Player, "BadArgs")
 			end
+		else
+			Dropped(Player, "UnknownChannel")
 		end
 	end
 end

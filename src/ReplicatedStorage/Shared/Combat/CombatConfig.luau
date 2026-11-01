@@ -52,8 +52,12 @@ return table.freeze({
 	}),
 
 	-- hit-claim validation (server)
-	ClaimTimeSlack = 0.35, -- seconds of latency allowed around the active window
-	ClaimRangeSlack = 4, -- studs beyond the hitbox reach
+	-- hit claims (ClaimRules)
+	ClaimEarlySlack = 0.05, -- seconds a claim may arrive before the hit frames; honest clients are never early
+	ClaimLateSlack = 0.35, -- seconds of round-trip latency allowed after them
+	ClaimRangeSlack = 4, -- studs beyond the hitbox, per axis
+	ClaimBehindSlack = 1.5, -- studs a target may be behind the attacker
+	ClaimRate = 20, -- hit claims per second, per player (burst of the same size)
 	IntentRate = 20, -- intents per second per player
 
 	-- limbs
@@ -75,7 +79,8 @@ return table.freeze({
 		WindupTurnEnd = 0.35, -- share of TurnRate left on the last windup frame
 		ActiveTurn = 0,
 		RecoveryTurn = 0.25,
-		RecoveryReleaseAt = 0.5, -- movement ramps back over the last half of recovery
+		RecoveryReleaseAt = 0, -- movement and turning start ramping back at this share of recovery
+		RecoveryReleaseEnd = 0.6, -- and are fully back here, before the state returns to Idle
 		TurnRate = math.rad(720), -- radians per second at Turn = 1
 		SlideSlack = 3, -- studs of latency slack in the server's windup travel check
 	}),

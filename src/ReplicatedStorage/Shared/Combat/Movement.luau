@@ -34,6 +34,42 @@ function Movement.Dash(Root : BasePart, Direction : Vector3, Speed : number, Dur
 	end)
 end
 
+-- continuous drive for forced movement: holds a horizontal velocity and a facing against any walk input
+-- until Stop. Set steers it; a zero velocity holds the root still and keeps the last facing.
+function Movement.Drive(Root : BasePart) : { Set : (Vector3) -> (), Stop : () -> () }
+	local A = Attach(Root)
+	local LV = Instance.new("LinearVelocity")
+	LV.Attachment0 = A
+	LV.RelativeTo = Enum.ActuatorRelativeTo.World
+	LV.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	LV.PrimaryTangentAxis = Vector3.xAxis
+	LV.SecondaryTangentAxis = Vector3.zAxis
+	LV.PlaneVelocity = Vector2.zero
+	LV.MaxForce = 1e6
+	LV.Parent = Root
+	local Align = Instance.new("AlignOrientation")
+	Align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	Align.Attachment0 = A
+	Align.MaxTorque = 1e6
+	Align.Responsiveness = 30
+	Align.CFrame = CFrame.lookAt(Vector3.zero, Root.CFrame.LookVector * Vector3.new(1, 0, 1))
+	Align.Parent = Root
+	return {
+		Set = function(Velocity : Vector3)
+			LV.PlaneVelocity = Vector2.new(Velocity.X, Velocity.Z)
+			local Flat = Velocity * Vector3.new(1, 0, 1)
+			if Flat.Magnitude > 1e-3 then
+				Align.CFrame = CFrame.lookAt(Vector3.zero, Flat)
+			end
+		end,
+		Stop = function()
+			LV:Destroy()
+			Align:Destroy()
+			A:Destroy()
+		end,
+	}
+end
+
 -- full 3D burst (knockback)
 function Movement.Knockback(Root : BasePart, Velocity : Vector3, Duration : number)
 	local A = Attach(Root)

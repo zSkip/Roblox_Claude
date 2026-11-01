@@ -14,6 +14,7 @@ local Clock = require(ReplicatedStorage.Core.Clock)
 local Combat = ReplicatedStorage.Shared.Combat
 local Stats = require(Combat.Stats)
 local LockProfile = require(Combat.LockProfile)
+local Movement = require(Combat.Movement)
 local CombatNet = require(Combat.CombatNet)
 local Effects = require(ReplicatedStorage.Shared.StatusEffects.Effects)
 
@@ -67,6 +68,55 @@ function EffectService.SendSnapshot(Player : Player)
 	end
 end
 
+---------------------------------------------------------------- forced movement (Charmed, Feared)
+
+local FORCED_STEER = 0.1
+
+-- velocity the effect wants right now; nil once its Source is gone
+local function ForcedVelocity(C : any, Inst : any) : Vector3?
+	local Source = Inst.Source
+	if type(Source) ~= "table" or not Source.Root or not CombatService.Alive(Source) then
+		return nil
+	end
+	local Force = Inst.Def.ForcedMove
+	local Offset = (C.Root.Position - Source.Root.Position) * Vector3.new(1, 0, 1)
+	if Force.Mode == "Away" then
+		return (if Offset.Magnitude > 1e-3 then Offset.Unit else Vector3.zAxis) * Force.Speed
+	end
+	return if Offset.Magnitude > (Force.StopAt or 0) then -Offset.Unit * Force.Speed else Vector3.zero
+end
+
+-- the server takes the root and drives it with a physics mover while an effect forces movement, and walk
+-- speed is 0, so neither movement input nor a hacked client can walk out of it
+local function StepForced(C : any)
+	local Inst = if CombatService.Alive(C) then C.Status:ForcedMove() else nil
+	local Hum = C.Humanoid :: Humanoid
+	local Root = C.Root :: BasePart
+	if not Inst then
+		if C.Forced then
+			C.Forced.Drive.Stop()
+			Hum.WalkSpeed = C.Forced.RestoreSpeed
+			C.Forced = nil
+			if C.Player and Root:IsDescendantOf(workspace) then
+				Root:SetNetworkOwner(C.Player)
+			end
+		end
+		return
+	end
+	if not C.Forced then
+		C.Forced = { RestoreSpeed = Hum.WalkSpeed, Drive = Movement.Drive(Root), NextSteer = 0 }
+		Hum.WalkSpeed = 0
+		Root:SetNetworkOwner(nil)
+	end
+	local Velocity = ForcedVelocity(C, Inst)
+	if Velocity then
+		C.Forced.NextSteer = os.clock() + FORCED_STEER
+		C.Forced.Drive.Set(Velocity)
+	else
+		C.Status:Remove(Inst.Def.Id, "SourceLost") -- its change event runs StepForced again and releases
+	end
+end
+
 ---------------------------------------------------------------- change handling
 
 -- Stunned / GuardBroken while any Locked-or-stronger effect is active, back to neutral when the last ends
@@ -104,6 +154,7 @@ local function OnChanged(C : any, Event : any)
 	end
 	Send(C, Def, nil)
 	SyncLockState(C)
+	StepForced(C)
 	CombatService.ApplyMovement(C)
 	EffectService.Changed:Fire(C, Event)
 end
@@ -160,6 +211,9 @@ function EffectService.Start(_self : any)
 		for _, C in CombatService.Combatants do
 			for _, Inst in C.Status:Update(Now) do
 				ApplyTick(C, Inst)
+			end
+			if C.Forced and os.clock() >= C.Forced.NextSteer then
+				StepForced(C)
 			end
 		end
 	end)

@@ -65,7 +65,7 @@ function CombatService.ApplyMovement(C : any)
 	local Cap = C:WalkSpeed(Config)
 	if C.Player then
 		C.Model:SetAttribute("WalkCap", Cap)
-	else
+	elseif not C.Forced then -- EffectService sets the speed while it walks the combatant
 		Hum.WalkSpeed = if C.Runtime.Current == "Attacking" then 0 else Cap
 	end
 	Hum.JumpHeight = if C.Runtime.Current == "Idle" and C.Status:Can("Jump") then Config.BaseJumpHeight else 0

@@ -49,7 +49,7 @@ Windup     = BaseWindup + (AttackTime × WindupPercent − BaseWindup) × Windup
 |---|---|---|
 | Free | Idle | full movement |
 | Steer | attack windup | walk speed eases linearly from 100% to 0 by the last windup frame; turning toward the camera narrows to 35% |
-| Rooted | hit frames, recovery | no movement or turning; movement ramps back over the last half of recovery |
+| Rooted | hit frames, recovery | no movement or turning during the hit frames; movement and turning ramp back over the first 60% of recovery (`RecoveryReleaseAt` / `RecoveryReleaseEnd`), then Free until the state returns to Idle |
 | Locked | stun, guard break | nothing |
 | Forced | reserved | knockback / airborne |
 

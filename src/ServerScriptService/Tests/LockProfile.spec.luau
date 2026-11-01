@@ -46,6 +46,22 @@ return function(Describe, It, Expect)
 			Expect(LockProfile.Sample("Attacking", 1.2, T, Cfg).Move).ToBeNear(1)
 		end)
 
+		It("hands control back early when RecoveryReleaseEnd is below 1", function()
+			local Early = table.clone(Cfg)
+			Early.RecoveryReleaseAt = 0
+			Early.RecoveryReleaseEnd = 0.5
+			local Mid = LockProfile.Sample("Attacking", 0.9, T, Early) -- a quarter into recovery
+			Expect(Mid.Tier).ToBe(Tiers.Rooted)
+			Expect(Mid.Move).ToBeNear(0.5)
+			Expect(Mid.Turn).ToBeNear(0.625)
+			local Done = LockProfile.Sample("Attacking", 1.01, T, Early)
+			Expect(Done.Tier).ToBe(Tiers.Free)
+			Expect(Done.Move).ToBe(1)
+			Expect(Done.Jump).ToBe(false)
+			-- ramp of 0.2 s averages half speed, then full speed for the last 0.2 s
+			Expect(LockProfile.MaxTravel(T, 1.2, 10, Early)).ToBeNear(6)
+		end)
+
 		It("integrates the curve for the server's travel check", function()
 			Expect(LockProfile.MaxTravel(T, 0.3, 10, Cfg)).ToBeNear(2.25)
 			Expect(LockProfile.MaxTravel(T, 0.6, 10, Cfg)).ToBeNear(3)

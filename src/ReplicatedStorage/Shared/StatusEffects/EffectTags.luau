@@ -16,7 +16,7 @@ local EffectTags = {}
 EffectTags.Actions = table.freeze({ "Move", "Rotate", "Jump", "Attack", "Defend", "Dodge", "Ability" })
 
 EffectTags.Tags = table.freeze({
-	"Stun", "Slow", "Root", "Cripple", "Disarm", "Silence", "Airborne", "Grounded",
+	"Stun", "Slow", "Root", "Cripple", "Disarm", "Silence", "Airborne", "Grounded", "Charm", "Fear",
 	"Cleansable", -- Cleanse removes it
 	"TenacityAffected", -- Tenacity shortens it (with the MinCCDuration floor)
 	"Invulnerable", -- skips damage (the Resolver treats it as i-frames); does not stop CC

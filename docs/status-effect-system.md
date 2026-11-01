@@ -13,6 +13,8 @@ Background reference: `skills/game.status-effects.lol-stats-cc.skill.md` (LoL st
 > - **Intent gate:** `IntentService` drops Attack / Dodge intents that `Can` rejects. Defend intents always pass, so a held F still blocks once a stun ends.
 > - **Client lock:** `LockProfile.Combine(stateSample, EffectController.LockTier(character))` takes the higher tier and the smaller Move / Turn.
 > - **HUD:** text chips (id, stacks, seconds left) above your posture bar, and an `EffectIcons` billboard over everyone else.
+> - **Forced movement (added 2026-11-01, was a non-goal):** `Charmed` and `Feared` carry `ForcedMove = { Mode, Speed, StopAt? }` and need a combatant as `Source`. While one is active, `EffectService` takes network ownership of the target's root, sets walk speed to 0 and drives it with a server-side physics mover (`Movement.Drive`), so players and NPCs share one path and movement input can't resist it. Client-side teleports are not corrected, so a hacked client can still jump away the moment ownership returns; that gap belongs to the netcode work. Knockback on a target being forced is overridden horizontally by the mover. Ownership returns when the effect ends, and the effect ends if the Source dies. Taunt is still not built.
+> - **Test fixtures are tagged instances:** pads are Parts tagged `EffectZone` and NPCs are Models tagged `NPC`, configured by attributes (`Tools/BuildArena` creates them, the place file holds them). Caster NPCs (`Brain = "Caster"`) apply `CastEffect` every `CastInterval` seconds after a `CastWindup` tether; stunning or silencing them interrupts the cast.
 
 ## 1. Goals
 
@@ -22,7 +24,7 @@ Background reference: `skills/game.status-effects.lol-stats-cc.skill.md` (LoL st
 4. **Server-authoritative, client-predicted only for visuals.** The server applies and expires effects. The client mirrors them for HUD icons, VFX and the movement lock.
 5. **Pure core, testable in TestKit.** `StatusController` takes `Now` as an argument and never touches Instances, so every rule gets a spec.
 
-Non-goals for this iteration: limb-break effects beyond the default handler, Charm/Taunt/Fear forced movement, Stasis.
+Non-goals for this iteration: limb-break effects beyond the default handler, Taunt, Stasis.
 
 ## 2. Layout
 
